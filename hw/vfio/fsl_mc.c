@@ -674,8 +674,9 @@ static uint64_t vfio_fsl_mc_region_read(void *opaque, hwaddr offset,
     } buf;
     uint64_t data = 0;
 
-    /* Support read on DPRC devices only */
-    if (strncmp(vdev->device_type, "dprc", 4)) {
+    /* Allow reads on DPMCP and DPRC devices */
+    if (strncmp(vdev->device_type, "dprc", 4) &&
+        strncmp(vdev->device_type, "dpmcp", 5)) {
         printf("Read to device (%s) type not supported", vdev->device_type);
         return 0;
     }
@@ -716,8 +717,9 @@ static void vfio_fsl_mc_region_write(void *opaque, hwaddr offset,
         uint64_t qword;
     } buf;
 
-    /* Support read on DPRC devices only */
-    if (strncmp(vdev->device_type, "dprc", 4)) {
+    /* Allow writes on DPMCP and DPRC devices */
+    if (strncmp(vdev->device_type, "dprc", 4) &&
+        strncmp(vdev->device_type, "dpmcp", 5)) {
         printf("Write to device (%s) not supported", vdev->device_type);
         return;
     }
@@ -965,10 +967,10 @@ static void vfio_fsl_mc_create_qdev(VFIOFslmcDevice *parent_vdev,
     dev->id = TYPE_VFIO_FSL_MC;
     qdev_prop_set_string(dev, "host", mcdev_name);
     qdev_prop_set_ptr(dev, "parent_vdev", parent_vdev);
-    /* Do not mmap dprc region, instead use slowpatch.
-     * TODO: Selectively allow dpmcp device region mmap
-     */
-    if (strncmp(mcdev_name, "dprc", 4) == 0) {
+
+    /* Do not mmap dprc region, instead use slowpatch */
+    if ((strncmp(mcdev_name, "dprc", 4) == 0) ||
+        (strncmp(mcdev_name, "dpmcp", 5) == 0)) {
         qdev_prop_set_bit(dev, "x-no-mmap", true);
     } else {
         qdev_prop_set_bit(dev, "x-no-mmap", false);
