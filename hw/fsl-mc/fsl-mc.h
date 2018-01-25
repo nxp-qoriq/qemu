@@ -89,6 +89,18 @@ typedef struct FslMcHostClass {
 #define FSL_MC_DEVICE_GET_CLASS(obj) \
         OBJECT_GET_CLASS(FslMcDeviceClass, (obj), TYPE_FSL_MC_DEVICE)
 
+struct mcdev_region {
+    off_t offset;
+    size_t size;
+};
+
+/* Define max number of regions in a mc-device, 10 is safe
+ * value as of now, because 3 is the max number of
+ * regions on any known device today.
+ * TODO Remove static array
+ */
+#define FSLMC_MAX_REGIONS 10
+
 typedef struct FslMcDeviceState {
     /*< private >*/
     DeviceState parent_obj;
@@ -97,6 +109,7 @@ typedef struct FslMcDeviceState {
     FslMcBusState *bus;
     struct FslMcDeviceState *parent_mcdev;
     uint32_t device_id;
+    struct mcdev_region regions[FSLMC_MAX_REGIONS];
     QLIST_ENTRY(FslMcDeviceState) next;
 } FslMcDeviceState;
 
@@ -110,4 +123,6 @@ typedef struct FslMcDeviceClass {
 
 int fsl_mc_register_device(FslMcDeviceState *mcdev, FslMcDeviceState *pmcdev,
                            char *device_type);
+int fsl_mc_register_device_region(FslMcDeviceState *mcdev, int region_num,
+                                  MemoryRegion *mem, char *device_type);
 #endif /* !defined(FSL_MC_FSL_MC_H) */
