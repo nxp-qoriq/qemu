@@ -58,6 +58,15 @@ struct get_obj_region_resp {
     uint32_t flags;
 };
 
+struct dprc_set_irq_cmd {
+    uint32_t irq_val;
+    uint8_t irq_index;
+    uint8_t reserved1;
+    uint16_t reserved2;
+    uint64_t irq_addr;
+    uint32_t irq_num;
+};
+
 typedef union {
     uint64_t portal[8];
     struct {
