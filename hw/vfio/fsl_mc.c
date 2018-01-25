@@ -100,6 +100,9 @@ enum mc_cmd_status {
 #define DPRC_CMD_CODE_GET_CONT_ID      0x830
 #define DPMNG_CMD_CODE_GET_VERSION     0x831
 
+/* DPMCP Commands */
+#define DPMCP_CMD_CODE_OPEN            0x80B
+
 enum mcportal_state {
     MCPORTAL_CLOSE,
     MCPORTAL_OPEN
@@ -309,6 +312,39 @@ static void dprc_close(VFIORegion *region, MCPortal *mcp, uint16_t token)
     QLIST_REMOVE(mc_cmdif, next);
 }
 
+static void dpmcp_open(VFIORegion *region, MCPortal *mcp)
+{
+    VFIODevice *vbasedev = region->vbasedev;
+    VFIOFslmcDevice *vdev =
+        container_of(vbasedev, VFIOFslmcDevice, vbasedev);
+    uint16_t token;
+    VFIOFSLMC_cmdif *mc_cmdif;
+
+    vfio_fsl_mc_portal_send_cmd(region, mcp);
+    if (fslmc_get_cmd_status(mcp->p.header) != MC_CMD_STATUS_OK) {
+        return;
+    }
+
+    token = fslmc_get_cmd_token(mcp->p.header);
+    QLIST_FOREACH(mc_cmdif, &mc_cmdif_list, next) {
+        if (mc_cmdif->token == token) {
+            printf("Instance already opened \n");
+            goto err;
+        }
+    }
+
+    mc_cmdif = g_new0(VFIOFSLMC_cmdif, 1);
+    mc_cmdif->token = token;
+    mc_cmdif->state = MCPORTAL_OPEN;
+    mc_cmdif->mcportal_vdev = vdev;
+    mc_cmdif->cmdif_type = CMDIF_DPMCP;
+    QLIST_INSERT_HEAD(&mc_cmdif_list, mc_cmdif, next);
+    return;
+
+err:
+    fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_NO_RESOURCE);
+}
+
 static inline void dprc_set_icid(MCPortal *mcp, uint32_t sid)
 {
     struct dprc_get_attributes_response *resp;
@@ -496,6 +532,7 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
     }
 
     if ((cmd != DPRC_CMD_CODE_OPEN) &&
+        (cmd != DPMCP_CMD_CODE_OPEN) &&
         (cmd != DPRC_CMD_CODE_GET_CONT_ID) &&
         (cmd != DPMNG_CMD_CODE_GET_VERSION) &&
         (cmd != DPRC_CMD_CODE_GET_API_VERSION)) {
@@ -530,6 +567,9 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
         break;
     case DPRC_CMD_CODE_GET_OBJ_IRQ:
         dprc_get_obj_irq(region, mcp, mc_cmdif);
+        break;
+    case DPMCP_CMD_CODE_OPEN:
+        dpmcp_open(region, mcp);
         break;
     default:
         /* Commands which does not need emulation are forwarded to VFIO */
