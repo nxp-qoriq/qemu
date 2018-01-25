@@ -93,6 +93,7 @@ enum mc_cmd_status {
 #define DPRC_CMD_CODE_GET_ATTR         0x004
 #define DPRC_CMD_CODE_GET_OBJ_REG      0x15E
 #define DPRC_CMD_CODE_SET_IRQ          0x010
+#define DPRC_CMD_CODE_GET_IRQ          0x011
 
 enum mcportal_state {
     MCPORTAL_CLOSE,
@@ -391,6 +392,23 @@ static void dprc_set_irq(VFIORegion *region, MCPortal *mcp,
     fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_OK);
 }
 
+static void dprc_get_irq(VFIORegion *region, MCPortal *mcp,
+                         VFIOFSLMC_cmdif *mc_cmdif)
+{
+    VFIOFslmcDevice *vdev = mc_cmdif->mcportal_vdev;
+    struct dprc_get_irq_cmd *cmd = (struct dprc_get_irq_cmd *)&mcp->p.data[0];
+    struct dprc_get_irq_resp *resp = (struct dprc_get_irq_resp *)&mcp->p.data[0];
+    MSIMessage msg;
+
+    msg = fslmc_get_msi_message(&vdev->mcdev, cmd->irq_index);
+    resp->irq_val = msg.data;
+    resp->irq_addr = msg.address;
+    resp->irq_num = 1;
+    resp->irq_type = 0;
+
+    fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_OK);
+}
+
 static void vfio_handle_fslmc_command(VFIORegion *region,
                                       VFIOFslmcDevice *vdev)
 {
@@ -428,6 +446,9 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
         break;
     case DPRC_CMD_CODE_SET_IRQ:
         dprc_set_irq(region, mcp, mc_cmdif);
+        break;
+    case DPRC_CMD_CODE_GET_IRQ:
+        dprc_get_irq(region, mcp, mc_cmdif);
         break;
     default:
         printf("%s: Unsupported MC Command %x\n", __func__, cmd);
