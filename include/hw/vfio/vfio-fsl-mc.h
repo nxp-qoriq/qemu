@@ -23,6 +23,10 @@ struct VFIOFslMcIrqs {
     uint8_t irq_index;
 };
 
+struct dprc_open_cmd {
+    uint32_t container_id;
+};
+
 typedef union {
     uint64_t portal[8];
     struct {
