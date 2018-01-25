@@ -199,7 +199,7 @@ static void ioapic_update_kvm_routes(IOAPICCommonState *s)
             ioapic_entry_parse(s->ioredtbl[i], &info);
             msg.address = info.addr;
             msg.data = info.data;
-            kvm_irqchip_update_msi_route(kvm_state, i, msg, NULL);
+            kvm_irqchip_update_msi_route(kvm_state, i, msg, 0, NULL);
         }
         kvm_irqchip_commit_routes(kvm_state);
     }

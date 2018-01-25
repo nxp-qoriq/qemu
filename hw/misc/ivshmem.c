@@ -318,7 +318,8 @@ static int ivshmem_vector_unmask(PCIDevice *dev, unsigned vector,
 
     IVSHMEM_DPRINTF("vector unmask %p %d\n", dev, vector);
 
-    ret = kvm_irqchip_update_msi_route(kvm_state, v->virq, msg, dev);
+    ret = kvm_irqchip_update_msi_route(kvm_state, v->virq, msg,
+                                       pci_requester_id(dev), DEVICE(dev));
     if (ret < 0) {
         return ret;
     }
@@ -443,11 +444,14 @@ static void ivshmem_add_kvm_msi_virq(IVShmemState *s, int vector,
 {
     PCIDevice *pdev = PCI_DEVICE(s);
     int ret;
+    MSIMessage msg;
 
     IVSHMEM_DPRINTF("ivshmem_add_kvm_msi_virq vector:%d\n", vector);
     assert(!s->msi_vectors[vector].pdev);
 
-    ret = kvm_irqchip_add_msi_route(kvm_state, vector, pdev);
+    msg = pci_get_msi_message(pdev, vector);
+    ret = kvm_irqchip_add_msi_route(kvm_state, vector, msg,
+                                    pci_requester_id(pdev), DEVICE(pdev));
     if (ret < 0) {
         error_setg(errp, "kvm_irqchip_add_msi_route failed");
         return;

@@ -3293,7 +3293,8 @@ void kvm_arch_init_irq_routing(KVMState *s)
         /* If the ioapic is in QEMU and the lapics are in KVM, reserve
            MSI routes for signaling interrupts to the local apics. */
         for (i = 0; i < IOAPIC_NUM_PINS; i++) {
-            if (kvm_irqchip_add_msi_route(s, 0, NULL) < 0) {
+            MSIMessage msg = {0, 0};
+            if (kvm_irqchip_add_msi_route(s, 0, msg, 0,  NULL) < 0) {
                 error_report("Could not enable split IRQ mode.");
                 exit(1);
             }
@@ -3461,7 +3462,7 @@ int kvm_device_msix_deassign(KVMState *s, uint32_t dev_id)
 }
 
 int kvm_arch_fixup_msi_route(struct kvm_irq_routing_entry *route,
-                             uint64_t address, uint32_t data, PCIDevice *dev)
+                             uint64_t address, uint32_t data, DeviceState *dev)
 {
     X86IOMMUState *iommu = x86_iommu_get_default();
 
@@ -3476,7 +3477,7 @@ int kvm_arch_fixup_msi_route(struct kvm_irq_routing_entry *route,
         src.data = route->u.msi.data;
 
         ret = class->int_remap(iommu, &src, &dst, dev ? \
-                               pci_requester_id(dev) : \
+                               pci_requester_id(PCI_DEVICE(dev)) : \
                                X86_IOMMU_SID_INVALID);
         if (ret) {
             trace_kvm_x86_fixup_msi_error(route->gsi);
@@ -3515,14 +3516,15 @@ static void kvm_update_msi_routes_all(void *private, bool global,
         cnt++;
         msg = pci_get_msi_message(entry->dev, entry->vector);
         kvm_irqchip_update_msi_route(kvm_state, entry->virq,
-                                     msg, entry->dev);
+                                     msg, pci_requester_id(entry->dev),
+                                     DEVICE(entry->dev));
     }
     kvm_irqchip_commit_routes(kvm_state);
     trace_kvm_x86_update_msi_routes(cnt);
 }
 
 int kvm_arch_add_msi_route_post(struct kvm_irq_routing_entry *route,
-                                int vector, PCIDevice *dev)
+                                int vector, DeviceState *dev)
 {
     static bool notify_list_inited = false;
     MSIRouteEntry *entry;
@@ -3535,7 +3537,7 @@ int kvm_arch_add_msi_route_post(struct kvm_irq_routing_entry *route,
     }
 
     entry = g_new0(MSIRouteEntry, 1);
-    entry->dev = dev;
+    entry->dev = PCI_DEVICE(dev);
     entry->vector = vector;
     entry->virq = route->gsi;
     QLIST_INSERT_HEAD(&msi_route_list, entry, list);

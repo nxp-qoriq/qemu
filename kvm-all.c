@@ -1249,15 +1249,11 @@ int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg)
     return kvm_set_irq(s, route->kroute.gsi, 1);
 }
 
-int kvm_irqchip_add_msi_route(KVMState *s, int vector, PCIDevice *dev)
+int kvm_irqchip_add_msi_route(KVMState *s, int vector, MSIMessage msg,
+                              uint32_t devid, DeviceState *dev)
 {
     struct kvm_irq_routing_entry kroute = {};
     int virq;
-    MSIMessage msg = {0, 0};
-
-    if (dev) {
-        msg = pci_get_msi_message(dev, vector);
-    }
 
     if (kvm_gsi_direct_mapping()) {
         return kvm_arch_msi_data_to_gsi(msg.data);
@@ -1280,7 +1276,7 @@ int kvm_irqchip_add_msi_route(KVMState *s, int vector, PCIDevice *dev)
     kroute.u.msi.data = le32_to_cpu(msg.data);
     if (kvm_msi_devid_required()) {
         kroute.flags = KVM_MSI_VALID_DEVID;
-        kroute.u.msi.devid = pci_requester_id(dev);
+        kroute.u.msi.devid = devid;
     }
     if (kvm_arch_fixup_msi_route(&kroute, msg.address, msg.data, dev)) {
         kvm_irqchip_release_virq(s, virq);
@@ -1297,7 +1293,7 @@ int kvm_irqchip_add_msi_route(KVMState *s, int vector, PCIDevice *dev)
 }
 
 int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg,
-                                 PCIDevice *dev)
+                                 uint32_t devid, DeviceState *dev)
 {
     struct kvm_irq_routing_entry kroute = {};
 
@@ -1317,7 +1313,7 @@ int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg,
     kroute.u.msi.data = le32_to_cpu(msg.data);
     if (kvm_msi_devid_required()) {
         kroute.flags = KVM_MSI_VALID_DEVID;
-        kroute.u.msi.devid = pci_requester_id(dev);
+        kroute.u.msi.devid = devid;
     }
     if (kvm_arch_fixup_msi_route(&kroute, msg.address, msg.data, dev)) {
         return -EINVAL;
@@ -1440,7 +1436,8 @@ static int kvm_irqchip_assign_irqfd(KVMState *s, int fd, int virq, bool assign)
     abort();
 }
 
-int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg)
+int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg,
+                                 uint32_t devid, DeviceState *dev)
 {
     return -ENOSYS;
 }
