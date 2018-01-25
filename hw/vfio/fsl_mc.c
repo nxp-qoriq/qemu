@@ -228,7 +228,7 @@ static void vfio_fsl_mc_realize(FslMcDeviceState *mcdev, Error **errp)
     VFIODevice *vbasedev = &vdev->vbasedev;
     VFIOFslmcDevice *parent_vdev = (VFIOFslmcDevice *)vdev->parent_vdev;
     FslMcDeviceState *pmcdev = NULL;
-    int ret;
+    int ret, i;
     char *temp;
 
     if (!(strncmp(vbasedev->name, "dprc", 4))) {
@@ -272,6 +272,24 @@ static void vfio_fsl_mc_realize(FslMcDeviceState *mcdev, Error **errp)
     if (ret) {
         error_setg(errp, "Failed to register device");
         return;
+    }
+
+    for (i = 0; i < vbasedev->num_regions; i++) {
+        VFIORegion *region;
+
+        if (vfio_region_mmap(vdev->regions[i])) {
+            error_report("%s mmap unsupported. Performance may be slow",
+                         memory_region_name(vdev->regions[i]->mem));
+        }
+
+        region = vdev->regions[i];
+        ret = fsl_mc_register_device_region(mcdev, i, region->mem,
+                                            vdev->device_type);
+        if (ret) {
+            error_setg(errp,  "Failed to Register device");
+            return;
+        }
+        vfio_region_mmaps_set_enabled(region, true);
     }
     return;
 }
