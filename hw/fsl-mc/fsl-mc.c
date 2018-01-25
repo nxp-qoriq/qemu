@@ -20,6 +20,9 @@
 #include "qemu/error-report.h"
 #include "fsl-mc.h"
 
+/* For Linear allocation of device-id */
+static uint32_t device_id;
+
 static Property fsl_mc_props[] = {
     DEFINE_PROP_UINT64("mc_bus_base_addr", FslMcHostState, mc_bus_base_addr, 0),
     DEFINE_PROP_UINT64("mc_portals_offset", FslMcHostState,
@@ -63,6 +66,25 @@ int fsl_mc_register_device(FslMcDeviceState *mcdev, FslMcDeviceState *pmcdev,
     }
 
     mcdev->parent_mcdev = pmcdev;
+
+    /* All devices in a dprc container share same device-id.
+     * So device-id is allocated for a dprc container and same
+     * set for all devices in that container.
+     */
+    if (strncmp(device_type, "dprc", 4) == 0) {
+        if (device_id >= (host->mc_bus_devid_start + host->mc_bus_devid_num)) {
+            printf("%s: out of device-id\n", __func__);
+            return -ENODEV;
+        }
+        mcdev->device_id = host->mc_bus_devid_start + device_id;
+        device_id++;
+    } else {
+        if (mcdev->parent_mcdev == NULL) {
+            return -ENODEV;
+        }
+        mcdev->device_id = mcdev->parent_mcdev->device_id;
+    }
+
     QLIST_INSERT_HEAD(&bus->device_list, mcdev, next);
     return 0;
 }
