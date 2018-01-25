@@ -236,6 +236,10 @@ static void vfio_fsl_mc_realize(FslMcDeviceState *mcdev, Error **errp)
         if (parent_vdev == NULL) {
             QLIST_INSERT_HEAD(&root_dprc_list, vdev, root_dprc_next);
             QLIST_INIT(&vdev->device_list);
+        } else {
+            /* Add to parent DPRC device list */
+            pmcdev = &parent_vdev->mcdev;
+            QLIST_INSERT_HEAD(&parent_vdev->device_list, vdev, next);
         }
     }
 
