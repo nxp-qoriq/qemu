@@ -56,6 +56,7 @@
 #include "hw/smbios/smbios.h"
 #include "qapi/visitor.h"
 #include "standard-headers/linux/input.h"
+#include "hw/fsl-mc/fsl-mc.h"
 
 #define DEFINE_VIRT_MACHINE_LATEST(major, minor, latest) \
     static void virt_##major##_##minor##_class_init(ObjectClass *oc, \
@@ -147,6 +148,8 @@ static const MemMapEntry a15memmap[] = {
     [VIRT_PCIE_PIO] =           { 0x3eff0000, 0x00010000 },
     [VIRT_PCIE_ECAM] =          { 0x3f000000, 0x01000000 },
     [VIRT_MEM] =                { 0x40000000, RAMLIMIT_BYTES },
+    /* Freescale MC-BUS 1GB space */
+    [VIRT_FSL_MC_BUS] =       { 0x4000000000ULL, 0x40000000 },
     /* Second PCIe window, 512GB wide at the 512GB boundary */
     [VIRT_PCIE_MMIO_HIGH] =   { 0x8000000000ULL, 0x8000000000ULL },
 };
@@ -1131,6 +1134,26 @@ static void create_platform_bus(VirtMachineState *vms, qemu_irq *pic)
                                 sysbus_mmio_get_region(s, 0));
 }
 
+static void create_fsl_mc(VirtMachineState *vms, qemu_irq *pic)
+{
+    hwaddr base = vms->memmap[VIRT_FSL_MC_BUS].base;
+    DeviceState *dev;
+    SysBusDevice *sdev;
+
+    dev = qdev_create(NULL, TYPE_FSL_MC_HOST);
+    dev->id = TYPE_FSL_MC_HOST;
+    /* QBman portals are placed after MC portals */
+    qdev_prop_set_uint64(dev, "mc_bus_base_addr", base);
+    qdev_prop_set_uint64(dev, "mc_portals_offset", 0x0);
+    qdev_prop_set_uint64(dev, "mc_portals_size", FSLMC_MCPORTALS_SIZE);
+    qdev_prop_set_uint64(dev, "qbman_portals_offset", FSLMC_MCPORTALS_SIZE);
+    qdev_prop_set_uint64(dev, "qbman_portals_size", FSLMC_QBMAN_PORTALS_SIZE);
+    qdev_init_nofail(dev);
+    sdev = SYS_BUS_DEVICE(dev);
+    sysbus_mmio_map(sdev, 0, base);
+    sysbus_mmio_map(sdev, 1, base + FSLMC_MCPORTALS_SIZE);
+}
+
 static void create_secure_ram(VirtMachineState *vms,
                               MemoryRegion *secure_sysmem)
 {
@@ -1434,6 +1457,9 @@ static void machvirt_init(MachineState *machine)
     vms->bootinfo.get_dtb = machvirt_dtb;
     vms->bootinfo.firmware_loaded = firmware_loaded;
     arm_load_kernel(ARM_CPU(first_cpu), &vms->bootinfo);
+
+    /* Create FSL-MC Bus device */
+    create_fsl_mc(vms, pic);
 
     /*
      * arm_load_kernel machine init done notifier registration must

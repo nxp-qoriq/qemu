@@ -72,6 +72,7 @@ enum {
     VIRT_GPIO,
     VIRT_SECURE_UART,
     VIRT_SECURE_MEM,
+    VIRT_FSL_MC_BUS,
 };
 
 typedef struct MemMapEntry {
