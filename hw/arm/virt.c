@@ -57,6 +57,7 @@
 #include "qapi/visitor.h"
 #include "standard-headers/linux/input.h"
 #include "hw/fsl-mc/fsl-mc.h"
+#include "hw/arm/fslmc-fdt.h"
 
 #define DEFINE_VIRT_MACHINE_LATEST(major, minor, latest) \
     static void virt_##major##_##minor##_class_init(ObjectClass *oc, \
@@ -93,6 +94,7 @@
 #define PLATFORM_BUS_NUM_IRQS 64
 
 static ARMPlatformBusSystemParams platform_bus_params;
+static FSLMCBusSystemParams fsl_mc_bus_params;
 
 /* RAM limit in GB. Since VIRT_MEM starts at the 1GB mark, this means
  * RAM can go up to the 256GB mark, leaving 256GB of the physical
@@ -1141,6 +1143,15 @@ static void create_fsl_mc(VirtMachineState *vms, qemu_irq *pic)
     hwaddr base = vms->memmap[VIRT_FSL_MC_BUS].base;
     DeviceState *dev;
     SysBusDevice *sdev;
+    FSLMCBusFDTParams *fdt_params = g_new(FSLMCBusFDTParams, 1);
+
+    fsl_mc_bus_params.fslmc_bus_base = base;
+    fsl_mc_bus_params.fslmc_bus_size = FSLMC_MCPORTALS_SIZE;
+
+    fdt_params->system_params = &fsl_mc_bus_params;
+    fdt_params->binfo = &vms->bootinfo;
+    fdt_params->intc = "/intc/its";
+    fsl_register_mc_bus_fdt_creator(fdt_params);
 
     dev = qdev_create(NULL, TYPE_FSL_MC_HOST);
     dev->id = TYPE_FSL_MC_HOST;
