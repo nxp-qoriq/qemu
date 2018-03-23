@@ -45,6 +45,7 @@
 enum {
     VFIO_DEVICE_TYPE_PCI = 0,
     VFIO_DEVICE_TYPE_PLATFORM = 1,
+    VFIO_DEVICE_TYPE_FSL_MC = 2,
 };
 
 typedef struct VFIOMmap {
