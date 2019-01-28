@@ -136,6 +136,37 @@ static int fsl_mc_get_qbportal_offset(FslMcHostState *host, off_t *offset,
     return 0;
 }
 
+/* Return base address and offset of device region */
+int fslmc_get_region_base_and_offset(FslMcDeviceState *mcdev, uint8_t index,
+                                     uint32_t *offset, uint64_t *base,
+                                     char *device_type)
+{
+    FslMcBusState *bus;
+    FslMcHostState *host;
+
+    bus = mcdev->bus;
+    if (bus == NULL) {
+        fprintf(stderr, "FSL-MC Bus not found\n");
+        return -ENODEV;
+    }
+
+    host = FSL_MC_HOST(bus->qbus.parent);
+    if (host == NULL) {
+        fprintf(stderr, "No FSL-MC Host bridge found\n");
+        return -ENODEV;
+    }
+
+    if ((strncmp(device_type, "dprc", 4) == 0) ||
+        (strncmp(device_type, "dpmcp", 5) == 0)) {
+        *base = host->mc_bus_base_addr + host->mc_portals_offset;
+    } else {
+        *base = host->mc_bus_base_addr + host->qbman_portals_offset;
+    }
+
+    *offset = mcdev->regions[index].offset;
+    return 0;
+}
+
 /* Linear allocation mc-portal regions */
 static int fsl_mc_get_mcportal_offset(FslMcHostState *host, off_t *offset)
 {
