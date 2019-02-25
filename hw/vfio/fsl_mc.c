@@ -690,17 +690,6 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
     VFIOFSLMC_cmdif *mc_cmdif = NULL;
     int version;
 
-    /* Supported MC f/w version - 10.0.0 and above
-     * supported MC-command version:
-     * - MC_CMD_HDR_BASE_VER
-     */
-    version = fslmc_get_command_version(mcp->p.header);
-    if (!(version == MC_CMD_HDR_BASE_VER || version == MC_CMD_HDR_VER_V2)) {
-        printf("un-supported command version (%d)\n", version);
-        fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_UNSUPPORTED_OP);
-        return;
-    }
-
     /* QEMU keep track of DPMCP command interface on DPMCP device
      * while other command interfaces (DPIO, DPNI etc) on DPMCP
      * are directly controlled by MC f/w.
@@ -719,6 +708,17 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
                 return;
             }
         }
+    }
+
+    /* Supported MC f/w version - 10.0.0 and above
+     * supported MC-command version:
+     * - MC_CMD_HDR_BASE_VER
+     */
+    version = fslmc_get_command_version(mcp->p.header);
+    if (!(version == MC_CMD_HDR_BASE_VER || version == MC_CMD_HDR_VER_V2)) {
+        printf("un-supported command version (%d)\n", version);
+        fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_UNSUPPORTED_OP);
+        return;
     }
 
     if ((cmd != DPRC_CMD_CODE_OPEN) &&
