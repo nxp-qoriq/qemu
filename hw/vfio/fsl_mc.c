@@ -222,6 +222,88 @@ static int vfio_base_device_init(VFIODevice *vbasedev, Error **errp)
     return ret;
 }
 
+/* If a filename starts with "dp", have a dot (.) and a device-id
+ * (integer value) then it is a valid fsl-mc device
+ */
+static bool vfio_fslmc_is_mcdev(const char *mcdev_name)
+{
+    char *name;
+    char *endp;
+    unsigned long value;
+
+    if (memcmp("dp", mcdev_name, 2)) {
+        return false;
+    }
+
+    name = strchr(mcdev_name, '.');
+    if (!strchr(mcdev_name, '.')) {
+        return false;
+    }
+
+    value = strtoul(++name, &endp, 10);
+    if ((value > INT32_MAX) || (endp == name)) {
+        return false;
+    }
+
+    return true;
+}
+
+static void vfio_fsl_mc_create_qdev(VFIOFslmcDevice *parent_vdev,
+                                    const char *mcdev_name)
+{
+    DeviceState *dev;
+
+    dev = qdev_create(&parent_vdev->mcdev.bus->qbus, TYPE_VFIO_FSL_MC);
+    dev->id = TYPE_VFIO_FSL_MC;
+    qdev_prop_set_string(dev, "host", mcdev_name);
+    qdev_prop_set_ptr(dev, "parent_vdev", parent_vdev);
+    /* Do not mmap dprc region, instead use slowpatch.
+     * TODO: Selectively allow dpmcp device region mmap
+     */
+    if (strncmp(mcdev_name, "dprc", 4) == 0) {
+        qdev_prop_set_bit(dev, "x-no-mmap", true);
+    } else {
+        qdev_prop_set_bit(dev, "x-no-mmap", false);
+    }
+
+    qdev_init_nofail(dev);
+}
+
+static void vfio_fsl_mc_scan_dprc(VFIOFslmcDevice *vdev)
+{
+    VFIODevice *vbasedev = &vdev->vbasedev;
+    char dev_syspath[FSLMC_DEV_SYSPATH_LEN];
+    DIR *dir;
+    struct dirent *entry;
+    int len;
+
+    if (strncmp(vdev->device_type, "dprc", 10)) {
+        goto out;
+    }
+
+    memset(&dev_syspath[0], 0, FSLMC_DEV_SYSPATH_LEN);
+    strncpy(dev_syspath, FSLMC_HOST_SYSFS_PATH, FSLMC_DEV_SYSPATH_LEN);
+    len = strlen(dev_syspath);
+    strncat(dev_syspath, vbasedev->name, (FSLMC_DEV_SYSPATH_LEN - len));
+    dir = opendir(dev_syspath);
+    if (!dir) {
+        error_report("vfio-fslmc: Failed to open directory: %s", dev_syspath);
+        goto out;
+    }
+
+    while ((entry = readdir(dir))) {
+        if (!vfio_fslmc_is_mcdev(entry->d_name)) {
+            continue;
+        }
+
+        vfio_fsl_mc_create_qdev(vdev, entry->d_name);
+    }
+
+    closedir(dir);
+out:
+    return;
+}
+
 static void vfio_fsl_mc_realize(FslMcDeviceState *mcdev, Error **errp)
 {
     VFIOFslmcDevice *vdev = DO_UPCAST(VFIOFslmcDevice, mcdev, mcdev);
@@ -291,6 +373,9 @@ static void vfio_fsl_mc_realize(FslMcDeviceState *mcdev, Error **errp)
         }
         vfio_region_mmaps_set_enabled(region, true);
     }
+
+    /* Scan dprc container and realize child devices */
+    vfio_fsl_mc_scan_dprc(vdev);
     return;
 }
 
@@ -312,7 +397,7 @@ static const VMStateDescription vfio_fsl_mc_vmstate = {
 static Property vfio_fsl_mc_dev_properties[] = {
     DEFINE_PROP_STRING("host", VFIOFslmcDevice, vbasedev.name),
     DEFINE_PROP_STRING("sysfsdev", VFIOFslmcDevice, vbasedev.sysfsdev),
-    DEFINE_PROP_BOOL("x-no-mmap", VFIOFslmcDevice, vbasedev.no_mmap, false),
+    DEFINE_PROP_BOOL("x-no-mmap", VFIOFslmcDevice, vbasedev.no_mmap, true),
     DEFINE_PROP_PTR("parent_vdev", VFIOFslmcDevice, parent_vdev),
     DEFINE_PROP_END_OF_LIST(),
 };
