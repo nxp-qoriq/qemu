@@ -72,6 +72,8 @@
 #include "hw/mem/nvdimm.h"
 #include "hw/acpi/generic_event_device.h"
 #include "hw/fsl-mc/fsl-mc.h"
+#include "hw/arm/fslmc-fdt.h"
+#include "hw/vfio/vfio-fsl-mc.h"
 
 #define DEFINE_VIRT_MACHINE_LATEST(major, minor, latest) \
     static void virt_##major##_##minor##_class_init(ObjectClass *oc, \
@@ -1452,6 +1454,8 @@ void virt_machine_done(Notifier *notifier, void *data)
                                        vms->memmap[VIRT_PLATFORM_BUS].base,
                                        vms->memmap[VIRT_PLATFORM_BUS].size,
                                        vms->irqmap[VIRT_PLATFORM_BUS]);
+        add_fsl_mc_bus_fdt_node(vms->fdt, "/intc/its",
+                                vms->memmap[VIRT_FSL_MC_BUS].base);
     }
     if (arm_load_dtb(info->dtb_start, info, info->dtb_limit, as, ms) < 0) {
         exit(1);

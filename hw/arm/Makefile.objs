@@ -1,5 +1,6 @@
 obj-y += boot.o
 obj-$(CONFIG_PLATFORM_BUS) += sysbus-fdt.o
+obj-$(CONFIG_FSL_MC_BUS) += fslmcbus-fdt.o
 obj-$(CONFIG_ARM_VIRT) += virt.o
 obj-$(CONFIG_ACPI) += virt-acpi-build.o
 obj-$(CONFIG_DIGIC) += digic_boards.o
