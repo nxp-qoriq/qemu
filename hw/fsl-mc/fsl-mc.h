@@ -136,4 +136,6 @@ MSIMessage fslmc_get_msi_message(FslMcDeviceState *mcdev, uint8_t index);
 void fslmc_set_msi_message(FslMcDeviceState *mcdev, MSIMessage msg,
                            uint8_t index);
 uint32_t fsl_mc_get_device_id(FslMcDeviceState *mcdev);
+uint64_t fslmc_get_region_addr(FslMcDeviceState *mcdev, uint8_t index);
+uint32_t fslmc_get_region_size(FslMcDeviceState *mcdev, uint8_t index);
 #endif /* !defined(FSL_MC_FSL_MC_H) */

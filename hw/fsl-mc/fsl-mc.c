@@ -81,6 +81,16 @@ uint32_t fsl_mc_get_device_id(FslMcDeviceState *mcdev)
     return mcdev->device_id;
 }
 
+uint64_t fslmc_get_region_addr(FslMcDeviceState *mcdev, uint8_t index)
+{
+    return mcdev->regions[index].offset;
+}
+
+uint32_t fslmc_get_region_size(FslMcDeviceState *mcdev, uint8_t index)
+{
+    return mcdev->regions[index].size;
+}
+
 /* Linear allocation QBMan-portal regions */
 static int fsl_mc_get_qbportal_offset(FslMcHostState *host, off_t *offset,
                                       int region_index)

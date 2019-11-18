@@ -91,6 +91,7 @@ enum mc_cmd_status {
 #define DPRC_CMD_CODE_OPEN             0x805
 #define DPRC_CMD_CODE_CLOSE            0x800
 #define DPRC_CMD_CODE_GET_ATTR         0x004
+#define DPRC_CMD_CODE_GET_OBJ_REG      0x15E
 
 enum mcportal_state {
     MCPORTAL_CLOSE,
@@ -206,6 +207,20 @@ static VFIOFSLMC_cmdif *get_mc_cmdif_from_token(uint16_t token)
     return NULL;
 }
 
+static VFIOFslmcDevice *get_vdev_in_dprc(VFIOFslmcDevice *vdev_dprc,
+                                          const char *obj_type, int obj_id)
+{
+    VFIOFslmcDevice *vdev;
+
+    QLIST_FOREACH(vdev, &vdev_dprc->device_list, next) {
+        if ((strcmp(vdev->device_type, obj_type) == 0) &&
+            (vdev->id == obj_id)) {
+            return vdev;
+        }
+    }
+    return NULL;
+}
+
 static int fslmc_auth_cmd(uint16_t token)
 {
     VFIOFSLMC_cmdif *mc_cmdif;
@@ -311,6 +326,41 @@ static void dprc_handle_get_attr(VFIORegion *region, MCPortal *mcp,
     dprc_set_icid(mcp, sid);
 }
 
+static void dprc_get_obj_region(VFIORegion *region, MCPortal *mcp,
+                                VFIOFSLMC_cmdif *mc_cmdif)
+{
+    VFIOFslmcDevice *vdev_dprc = mc_cmdif->mcportal_vdev;
+    VFIOFslmcDevice *vdev;
+    struct get_obj_region_cmd *cmd =
+               (struct get_obj_region_cmd *)&mcp->p.data[0];
+    struct get_obj_region_resp *resp =
+               (struct get_obj_region_resp *)&mcp->p.data[0];
+    uint8_t region_index = cmd->region_index;
+    uint8_t region_type;
+    enum mc_cmd_status status = MC_CMD_STATUS_OK;
+
+    vdev = get_vdev_in_dprc(vdev_dprc, cmd->obj_type, cmd->obj_id);
+    if (vdev == NULL) {
+        status = MC_CMD_STATUS_CONFIG_ERR;
+        goto out;
+    }
+
+    if (strncmp((char *)cmd->obj_type, "dpio", 4)) {
+        region_type = DPRC_REGION_TYPE_MC_PORTAL;
+    } else {
+        region_type = DPRC_REGION_TYPE_QBMAN_PORTAL;
+    }
+
+    memset(resp, 0, sizeof(mcp->p.data));
+    resp->base_addr = fslmc_get_region_addr(&vdev->mcdev, region_index);
+    resp->size = fslmc_get_region_size(&vdev->mcdev, region_index);
+    resp->type = region_type;
+    resp->flags = DPRC_REGION_FLAG_CACHE_INHIBIT;
+
+out:
+    fslmc_set_cmd_status(&mcp->p.header, status);
+}
+
 static void vfio_handle_fslmc_command(VFIORegion *region,
                                       VFIOFslmcDevice *vdev)
 {
@@ -342,6 +392,9 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
         break;
     case DPRC_CMD_CODE_GET_ATTR:
         dprc_handle_get_attr(region, mcp, mc_cmdif);
+        break;
+    case DPRC_CMD_CODE_GET_OBJ_REG:
+        dprc_get_obj_region(region, mcp, mc_cmdif);
         break;
     default:
         printf("%s: Unsupported MC Command %x\n", __func__, cmd);

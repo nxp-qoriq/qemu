@@ -34,6 +34,30 @@ struct dprc_get_attributes_response {
     uint32_t portal_id;
 };
 
+struct get_obj_region_cmd {
+    uint32_t obj_id;
+    uint16_t reserved1;
+    uint8_t region_index;
+    uint8_t reserved2;
+    uint64_t reserved3[2];
+    char obj_type[16];
+};
+
+struct get_obj_region_resp {
+    uint64_t reserved1;
+    uint64_t base_addr;
+    uint32_t size;
+/* Region Type */
+#define DPRC_REGION_TYPE_MC_PORTAL 0
+#define DPRC_REGION_TYPE_QBMAN_PORTAL 1
+    uint8_t type;
+    uint8_t reserved2;
+    uint16_t reserved3;
+#define DPRC_REGION_FLAG_CACHE_INHIBIT 0
+#define DPRC_REGION_FLAG_CACHEABLE 1
+    uint32_t flags;
+};
+
 typedef union {
     uint64_t portal[8];
     struct {
