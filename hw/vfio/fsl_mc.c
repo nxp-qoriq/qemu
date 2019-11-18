@@ -1220,6 +1220,8 @@ static void vfio_fsl_mc_realize(FslMcDeviceState *mcdev, Error **errp)
     temp++;
     vdev->id = atoi(temp);
 
+    vbasedev->dev = DEVICE(vdev);
+
     ret = fsl_mc_register_device(mcdev, pmcdev, vdev->device_type);
     if (ret) {
         error_setg(errp, "Failed to register device");
