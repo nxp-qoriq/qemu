@@ -60,6 +60,22 @@ static Property fsl_mc_props[] = {
     DEFINE_PROP_END_OF_LIST(),
 };
 
+MSIMessage fslmc_get_msi_message(FslMcDeviceState *mcdev, uint8_t index)
+{
+    MSIMessage msg;
+
+    msg.address = mcdev->irqs[index].msi_msg.address;
+    msg.data = mcdev->irqs[index].msi_msg.data;
+    return msg;
+}
+
+void fslmc_set_msi_message(FslMcDeviceState *mcdev, MSIMessage msg,
+                           uint8_t index)
+{
+    mcdev->irqs[index].msi_msg.address = msg.address;
+    mcdev->irqs[index].msi_msg.data = msg.data;
+}
+
 /* Linear allocation QBMan-portal regions */
 static int fsl_mc_get_qbportal_offset(FslMcHostState *host, off_t *offset,
                                       int region_index)

@@ -94,12 +94,18 @@ struct mcdev_region {
     size_t size;
 };
 
-/* Define max number of regions in a mc-device, 10 is safe
- * value as of now, because 3 is the max number of
- * regions on any known device today.
- * TODO Remove static array
- */
+/* Define max number of regions/irqs in a mc-device.
+ * 10 is safe value for both as of now.
+ * max number of regions is 2 and max number of irqs
+ * is 1 of any known mc device.
+ * TODO Remove static array for regions and irqs */
 #define FSLMC_MAX_REGIONS 10
+#define FSLMC_MAX_IRQS 10
+
+struct mcdev_irqs {
+    uint8_t irq_index;
+    MSIMessage msi_msg;
+};
 
 typedef struct FslMcDeviceState {
     /*< private >*/
@@ -110,6 +116,7 @@ typedef struct FslMcDeviceState {
     struct FslMcDeviceState *parent_mcdev;
     uint32_t device_id;
     struct mcdev_region regions[FSLMC_MAX_REGIONS];
+    struct mcdev_irqs irqs[FSLMC_MAX_IRQS];
     QLIST_ENTRY(FslMcDeviceState) next;
 } FslMcDeviceState;
 
@@ -125,4 +132,7 @@ int fsl_mc_register_device(FslMcDeviceState *mcdev, FslMcDeviceState *pmcdev,
                            char *device_type);
 int fsl_mc_register_device_region(FslMcDeviceState *mcdev, int region_num,
                                   MemoryRegion *mem, char *device_type);
+MSIMessage fslmc_get_msi_message(FslMcDeviceState *mcdev, uint8_t index);
+void fslmc_set_msi_message(FslMcDeviceState *mcdev, MSIMessage msg,
+                           uint8_t index);
 #endif /* !defined(FSL_MC_FSL_MC_H) */
