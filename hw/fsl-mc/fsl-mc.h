@@ -96,6 +96,7 @@ typedef struct FslMcDeviceState {
     DeviceState qdev;
     FslMcBusState *bus;
     struct FslMcDeviceState *parent_mcdev;
+    uint32_t device_id;
     QLIST_ENTRY(FslMcDeviceState) next;
 } FslMcDeviceState;
 
