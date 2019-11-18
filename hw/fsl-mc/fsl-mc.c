@@ -76,6 +76,11 @@ void fslmc_set_msi_message(FslMcDeviceState *mcdev, MSIMessage msg,
     mcdev->irqs[index].msi_msg.data = msg.data;
 }
 
+uint32_t fsl_mc_get_device_id(FslMcDeviceState *mcdev)
+{
+    return mcdev->device_id;
+}
+
 /* Linear allocation QBMan-portal regions */
 static int fsl_mc_get_qbportal_offset(FslMcHostState *host, off_t *offset,
                                       int region_index)
