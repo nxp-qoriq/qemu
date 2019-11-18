@@ -433,6 +433,7 @@ static void vfio_display_region_update(void *opaque)
         /* mmap region */
         ret = vfio_region_setup(OBJECT(vdev), &vdev->vbasedev,
                                 &dpy->region.buffer,
+                                NULL,
                                 plane.region_index,
                                 "display");
         if (ret != 0) {
