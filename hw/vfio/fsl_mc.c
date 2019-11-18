@@ -89,7 +89,6 @@ enum mc_cmd_status {
 
 /* DPRC Commands */
 #define DPRC_CMD_CODE_OPEN             0x805
-#define DPRC_CMD_CODE_CLOSE            0x800
 #define DPRC_CMD_CODE_GET_ATTR         0x004
 #define DPRC_CMD_CODE_GET_OBJ_REG      0x15E
 #define DPRC_CMD_CODE_SET_IRQ          0x010
@@ -102,6 +101,12 @@ enum mc_cmd_status {
 
 /* DPMCP Commands */
 #define DPMCP_CMD_CODE_OPEN            0x80B
+
+/* Command MC Commands
+ * DPRC, DPMCP and other command interfaces shares
+ * same close command
+ */
+#define DPXX_CMD_CODE_CLOSE      0x800
 
 enum mcportal_state {
     MCPORTAL_CLOSE,
@@ -301,22 +306,16 @@ err:
     fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_NO_RESOURCE);
 }
 
-static void dprc_close(VFIORegion *region, MCPortal *mcp, uint16_t token)
+static void dpxx_close(VFIORegion *region, MCPortal *mcp,
+                       VFIOFSLMC_cmdif *mc_cmdif)
 {
-    VFIOFSLMC_cmdif *mc_cmdif;
-
     vfio_fsl_mc_portal_send_cmd(region, mcp);
     if (fslmc_get_cmd_status(mcp->p.header) != MC_CMD_STATUS_OK) {
         return;
     }
 
-    QLIST_FOREACH(mc_cmdif, &mc_cmdif_list, next) {
-        if (mc_cmdif->token == token) {
-            break;
-        }
-    }
-
     if (mc_cmdif == NULL) {
+        /* MC close command for non dprc/dpmcp command interface type */
         printf("No mc_cmdif found\n");
         return;
     }
@@ -582,8 +581,9 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
     case DPRC_CMD_CODE_OPEN:
         dprc_open(region, mcp);
         break;
-    case DPRC_CMD_CODE_CLOSE:
-        dprc_close(region, mcp, token);
+    case DPXX_CMD_CODE_CLOSE:
+        /* Same command used to close dprc and dpmcp command interface */
+        dpxx_close(region, mcp, mc_cmdif);
         break;
     case DPRC_CMD_CODE_GET_ATTR:
         dprc_handle_get_attr(region, mcp, mc_cmdif);
