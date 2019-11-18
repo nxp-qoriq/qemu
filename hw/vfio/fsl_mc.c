@@ -418,10 +418,106 @@ out:
     fslmc_set_cmd_status(&mcp->p.header, status);
 }
 
+static void vfio_msi_interrupt(void *opaque)
+{
+    VFIOFSLMCMSIVector *vector = opaque;
+
+    printf("%s: Interrupt injection from QEMU not supported (vector = %p)\n",
+           __func__, vector);
+}
+
+static int vfio_set_msi_trigger_eventfd(VFIOFslmcDevice *vdev,
+                                        uint8_t irq_index)
+{
+    struct vfio_irq_set *irq_set;
+    int argsz, ret;
+    int32_t *pfd;
+
+    argsz = sizeof(*irq_set) + sizeof(*pfd);
+    irq_set = g_malloc0(argsz);
+    irq_set->argsz = argsz;
+    irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
+    irq_set->index = irq_index;
+    irq_set->start = 0;
+    irq_set->count = 1;
+    pfd = (int32_t *)&irq_set->data;
+
+    *pfd = event_notifier_get_fd(&vdev->irqs[irq_index]->msi_vector->kvm_interrupt);
+
+    ret = ioctl(vdev->vbasedev.fd, VFIO_DEVICE_SET_IRQS, irq_set);
+    g_free(irq_set);
+    if (ret < 0) {
+        error_report("vfio: Failed to set trigger eventfd: %m");
+        qemu_set_fd_handler(*pfd, NULL, NULL, NULL);
+    }
+    return ret;
+}
+
+static int vfio_add_kvm_msi_virq(VFIOFslmcDevice *vdev,
+                                  VFIOFSLMCMSIVector *vector,
+                                  int vector_n, uint8_t irq_index)
+{
+    int virq;
+    MSIMessage msg;
+    uint32_t devid;
+
+    if (event_notifier_init(&vector->kvm_interrupt, 0)) {
+        return -1;
+    }
+
+    msg = fslmc_get_msi_message(&vdev->mcdev, irq_index);
+    devid = fsl_mc_get_device_id(&vdev->mcdev);
+    virq = kvm_irqchip_add_msi_route(kvm_state, vector_n, msg, devid,
+                                     DEVICE(&vdev->mcdev));
+    if (virq < 0) {
+        event_notifier_cleanup(&vector->kvm_interrupt);
+        return -1;
+    }
+
+    if (kvm_irqchip_add_irqfd_notifier_gsi(kvm_state, &vector->kvm_interrupt,
+                                           NULL, virq) < 0) {
+        kvm_irqchip_release_virq(kvm_state, virq);
+        event_notifier_cleanup(&vector->kvm_interrupt);
+        return -1;
+    }
+
+    vector->virq = virq;
+    return 0;
+}
+
 static int vfio_set_kvm_msi_irqfd(VFIOFslmcDevice *vdev, uint8_t irq_index)
 {
-    /* Add fast-path with KVM IRQFD */
-    return -1;
+    VFIOFSLMCMSIVector *vector = NULL;
+    int ret;
+
+    vector = g_new0(VFIOFSLMCMSIVector, 1);
+    vdev->irqs[irq_index]->msi_vector = vector;
+    vector->vdev = vdev;
+    vector->virq = -1;
+    vector->use = true;
+
+    if (event_notifier_init(&vector->interrupt, 0)) {
+        error_report("vfio: Error: event_notifier_init failed");
+    }
+
+    qemu_set_fd_handler(event_notifier_get_fd(&vector->interrupt),
+                        vfio_msi_interrupt, NULL, vector);
+    /*
+     * Attempt to enable route through KVM irqchip,
+     * default to userspace handling if unavailable.
+     */
+
+    ret = vfio_add_kvm_msi_virq(vdev, vector, 0, irq_index);
+    if (ret) {
+        return ret;
+    }
+
+    ret = vfio_set_msi_trigger_eventfd(vdev, irq_index);
+    if (ret) {
+        return ret;
+    }
+
+    return 0;
 }
 
 static void dprc_set_irq(VFIORegion *region, MCPortal *mcp,
