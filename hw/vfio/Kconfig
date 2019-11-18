@@ -20,6 +20,12 @@ config VFIO_PLATFORM
     select VFIO
     depends on LINUX && PLATFORM_BUS
 
+config VFIO_FSL_MC
+    bool
+    default y
+    select VFIO
+    depends on LINUX && FSL_MC_BUS
+
 config VFIO_XGMAC
     bool
     default y
