@@ -98,6 +98,11 @@ typedef struct MemMapEntry {
     hwaddr size;
 } MemMapEntry;
 
+typedef struct DeviceIdMap {
+    uint32_t start;
+    uint32_t num;
+} DeviceIdMap;
+
 typedef struct {
     MachineClass parent;
     bool disallow_affinity_adjustment;
@@ -124,6 +129,7 @@ typedef struct {
     struct arm_boot_info bootinfo;
     MemMapEntry *memmap;
     const int *irqmap;
+    const DeviceIdMap *deviceidmap;
     int smp_cpus;
     void *fdt;
     int fdt_size;

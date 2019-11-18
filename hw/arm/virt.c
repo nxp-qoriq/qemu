@@ -175,6 +175,14 @@ static const int a15irqmap[] = {
     [VIRT_PLATFORM_BUS] = 112, /* ...to 112 + PLATFORM_BUS_NUM_IRQS -1 */
 };
 
+static const DeviceIdMap deviceidmap[] = {
+    /*
+     * Currently there is only one PCI controller and requester-id
+     * to device-id mapping is 1:1
+     */
+    [VIRT_PCIE] =       { 0, 0x10000 },
+};
+
 static const char *valid_cpus[] = {
     ARM_CPU_TYPE_NAME("cortex-a7"),
     ARM_CPU_TYPE_NAME("cortex-a15"),
@@ -2022,6 +2030,7 @@ static void virt_instance_init(Object *obj)
                                     NULL);
 
     vms->irqmap = a15irqmap;
+    vms->deviceidmap = deviceidmap;
 
     virt_flash_create(vms);
 }
