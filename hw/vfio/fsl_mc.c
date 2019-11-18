@@ -241,6 +241,16 @@ static void vfio_fsl_mc_realize(FslMcDeviceState *mcdev, Error **errp)
             pmcdev = &parent_vdev->mcdev;
             QLIST_INSERT_HEAD(&parent_vdev->device_list, vdev, next);
         }
+    } else {
+        /* If device is not "dprc" then it must have a parent dprc */
+        if (parent_vdev == NULL) {
+            error_setg(errp, "Device does not have parent dprc device");
+            return;
+        }
+
+        pmcdev = &parent_vdev->mcdev;
+        /* Add to device list of parent DPRC */
+        QLIST_INSERT_HEAD(&parent_vdev->device_list, vdev, next);
     }
 
     vbasedev->type = VFIO_DEVICE_TYPE_FSL_MC;
