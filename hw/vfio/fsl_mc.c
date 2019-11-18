@@ -546,6 +546,26 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
         return;
     }
 
+    /* QEMU keep track of DPMCP command interface on DPMCP device
+     * while other command interfaces (DPIO, DPNI etc) on DPMCP
+     * are directly controlled by MC f/w.
+     */
+    if (strncmp(vdev->device_type, "dpmcp", 5) == 0) {
+        mc_cmdif = get_mc_cmdif_from_token(token);
+        /* QEMU does not track non-dpmcp/dprc command interfaces,
+         * So forward mc commands on other command interface to mc f/w.
+         * Also dprc/dpmcp command interface will be set when dprc/dpmcp
+         * is opened on that DPMCP object.
+         */
+        if (mc_cmdif == NULL) {
+            if ((cmd != DPMCP_CMD_CODE_OPEN) &&
+               (cmd != DPRC_CMD_CODE_OPEN)) {
+                vfio_fsl_mc_portal_send_cmd(region, mcp);
+                return;
+            }
+        }
+    }
+
     if ((cmd != DPRC_CMD_CODE_OPEN) &&
         (cmd != DPMCP_CMD_CODE_OPEN) &&
         (cmd != DPRC_CMD_CODE_GET_CONT_ID) &&
