@@ -27,6 +27,13 @@ struct dprc_open_cmd {
     uint32_t container_id;
 };
 
+struct dprc_get_attributes_response {
+    uint32_t container_id;
+    uint32_t icid;
+    uint32_t options;
+    uint32_t portal_id;
+};
+
 typedef union {
     uint64_t portal[8];
     struct {
