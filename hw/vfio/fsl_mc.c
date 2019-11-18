@@ -96,6 +96,9 @@ enum mc_cmd_status {
 #define DPRC_CMD_CODE_GET_IRQ          0x011
 #define DPRC_CMD_CODE_SET_OBJ_IRQ      0x15F
 #define DPRC_CMD_CODE_GET_OBJ_IRQ      0x160
+#define DPRC_CMD_CODE_GET_API_VERSION  0xa05
+#define DPRC_CMD_CODE_GET_CONT_ID      0x830
+#define DPMNG_CMD_CODE_GET_VERSION     0x831
 
 enum mcportal_state {
     MCPORTAL_CLOSE,
@@ -492,7 +495,10 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
         return;
     }
 
-    if ((cmd != DPRC_CMD_CODE_OPEN)) {
+    if ((cmd != DPRC_CMD_CODE_OPEN) &&
+        (cmd != DPRC_CMD_CODE_GET_CONT_ID) &&
+        (cmd != DPMNG_CMD_CODE_GET_VERSION) &&
+        (cmd != DPRC_CMD_CODE_GET_API_VERSION)) {
         if (fslmc_auth_cmd(token)) {
             fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_AUTH_ERR);
             return;
@@ -526,8 +532,8 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
         dprc_get_obj_irq(region, mcp, mc_cmdif);
         break;
     default:
-        printf("%s: Unsupported MC Command %x\n", __func__, cmd);
-        fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_UNSUPPORTED_OP);
+        /* Commands which does not need emulation are forwarded to VFIO */
+        vfio_fsl_mc_portal_send_cmd(region, mcp);
         break;
     }
 }
