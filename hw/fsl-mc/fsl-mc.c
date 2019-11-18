@@ -126,6 +126,26 @@ static int fsl_mc_get_mcportal_offset(FslMcHostState *host, off_t *offset)
     return 0;
 }
 
+int fsl_mc_get_portal_ranges(hwaddr *mc_p_addr, hwaddr *mc_p_size,
+                              hwaddr *qbman_p_addr, hwaddr *qbman_p_size)
+{
+    DeviceState *dev;
+    FslMcHostState *host;
+
+    dev = qdev_find_recursive(sysbus_get_default(), TYPE_FSL_MC_HOST);
+    host = FSL_MC_HOST(dev);
+    if (host == NULL) {
+        fprintf(stderr, "No FSL-MC Host bridge found\n");
+        return -ENODEV;
+    }
+
+    *mc_p_addr = host->mc_bus_base_addr +  host->mc_portals_offset;
+    *mc_p_size = host->mc_portals_size;
+    *qbman_p_addr = host->mc_bus_base_addr + host->qbman_portals_offset;
+    *qbman_p_size = host->qbman_portals_size;
+    return 0;
+}
+
 int fsl_mc_register_device_region(FslMcDeviceState *mcdev, int region_num,
                                   MemoryRegion *mem, char *device_type)
 {
