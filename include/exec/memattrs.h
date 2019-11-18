@@ -36,7 +36,7 @@ typedef struct MemTxAttrs {
     /* Memory access is usermode (unprivileged) */
     unsigned int user:1;
     /* Requester ID (for MSI for example) */
-    unsigned int requester_id:16;
+    unsigned int requester_id:24;
     /*
      * The following are target-specific page-table bits.  These are not
      * related to actual memory transactions at all.  However, this structure
