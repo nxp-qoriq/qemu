@@ -2,7 +2,7 @@
  * vfio based device assignment support -Freescale Management Complex devices
  *
  * Copyright 2015-2016 Freescale Semiconductor, Inc.
- * Copyright 2017 NXP
+ * Copyright 2017-2019 NXP
  *
  * Author: Bharat Bhushan <bharat.bhushan@nxp.com>
  *
@@ -73,7 +73,30 @@ struct get_obj_region_resp {
     uint16_t reserved3;
 #define DPRC_REGION_FLAG_CACHE_INHIBIT 0
 #define DPRC_REGION_FLAG_CACHEABLE 1
+#define DPRC_REGION_FLAG_SHAREABLE 2
     uint32_t flags;
+};
+
+struct get_obj_region_resp_v2 {
+    /* Response word 0 */
+    uint64_t reserved1;
+    /* Response word 1 */
+    uint32_t base_offset;
+    uint32_t reserved2;
+    /* Response word 2 */
+    uint32_t size;
+/* Region Type */
+#define DPRC_REGION_TYPE_MC_PORTAL 0
+#define DPRC_REGION_TYPE_QBMAN_PORTAL 1
+    uint8_t type;
+    uint8_t reserved3[3];
+    /* Response word 2 */
+#define DPRC_REGION_FLAG_CACHE_INHIBIT 0
+#define DPRC_REGION_FLAG_CACHEABLE 1
+    uint32_t flags;
+    uint32_t reserved4;
+    /* Response word 2 */
+    uint64_t base_addr;
 };
 
 struct dprc_set_irq_cmd {
