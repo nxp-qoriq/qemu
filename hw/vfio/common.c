@@ -864,10 +864,14 @@ static int vfio_setup_region_sparse_mmaps(VFIORegion *region,
 }
 
 int vfio_region_setup(Object *obj, VFIODevice *vbasedev, VFIORegion *region,
-                      int index, const char *name)
+                      const MemoryRegionOps *ops, int index, const char *name)
 {
     struct vfio_region_info *info;
     int ret;
+
+    if (ops == NULL) {
+        ops = &vfio_region_ops;
+    }
 
     ret = vfio_get_region_info(vbasedev, index, &info);
     if (ret) {
@@ -882,8 +886,8 @@ int vfio_region_setup(Object *obj, VFIODevice *vbasedev, VFIORegion *region,
 
     if (region->size) {
         region->mem = g_new0(MemoryRegion, 1);
-        memory_region_init_io(region->mem, obj, &vfio_region_ops,
-                              region, name, region->size);
+        memory_region_init_io(region->mem, obj, ops, region, name,
+                              region->size);
 
         if (!vbasedev->no_mmap &&
             region->flags & VFIO_REGION_INFO_FLAG_MMAP) {

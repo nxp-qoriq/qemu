@@ -2495,7 +2495,7 @@ static void vfio_populate_device(VFIOPCIDevice *vdev, Error **errp)
         char *name = g_strdup_printf("%s BAR %d", vbasedev->name, i);
 
         ret = vfio_region_setup(OBJECT(vdev), vbasedev,
-                                &vdev->bars[i].region, i, name);
+                                &vdev->bars[i].region, NULL, i, name);
         g_free(name);
 
         if (ret) {
