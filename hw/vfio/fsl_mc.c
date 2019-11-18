@@ -86,6 +86,7 @@ enum mc_cmd_status {
  */
 #define MC_CMD_HDR_NO_VER               0x0
 #define MC_CMD_HDR_BASE_VER             0x1
+#define MC_CMD_HDR_VER_V2               0x2
 
 /* DPRC Commands */
 #define DPRC_CMD_CODE_OPEN             0x805
@@ -423,6 +424,54 @@ out:
     fslmc_set_cmd_status(&mcp->p.header, status);
 }
 
+static void dprc_get_obj_region_v2(VFIORegion *region, MCPortal *mcp,
+                                   VFIOFSLMC_cmdif *mc_cmdif)
+{
+    VFIOFslmcDevice *vdev_dprc = mc_cmdif->mcportal_vdev;
+    VFIOFslmcDevice *vdev;
+    struct get_obj_region_cmd *cmd =
+               (struct get_obj_region_cmd *)&mcp->p.data[0];
+    struct get_obj_region_resp_v2 *resp =
+               (struct get_obj_region_resp_v2 *)&mcp->p.data[0];
+    uint8_t region_index = cmd->region_index;
+    uint8_t region_type;
+    enum mc_cmd_status status = MC_CMD_STATUS_OK;
+    uint32_t offset;
+    uint64_t base_addr;
+
+    vdev = get_vdev_in_dprc(vdev_dprc, cmd->obj_type, cmd->obj_id);
+    if (vdev == NULL) {
+        status = MC_CMD_STATUS_CONFIG_ERR;
+        goto out;
+    }
+
+    if (strncmp((char *)cmd->obj_type, "dpio", 4)) {
+        region_type = DPRC_REGION_TYPE_MC_PORTAL;
+    } else {
+        region_type = DPRC_REGION_TYPE_QBMAN_PORTAL;
+    }
+
+    memset(resp, 0, sizeof(mcp->p.data));
+    fslmc_get_region_base_and_offset(&vdev->mcdev, region_index,
+                                     &offset, &base_addr, vdev->device_type);
+    resp->base_offset = offset;
+    resp->base_addr = base_addr;
+    resp->size = fslmc_get_region_size(&vdev->mcdev, region_index);
+    resp->type = region_type;
+    resp->flags = DPRC_REGION_FLAG_CACHE_INHIBIT;
+    if (region_type == DPRC_REGION_TYPE_QBMAN_PORTAL) {
+        if (region_index == 0) {
+            resp->flags = DPRC_REGION_FLAG_CACHEABLE;
+        } else if (region_index == 2) {
+            resp->flags = DPRC_REGION_FLAG_CACHEABLE |
+                           DPRC_REGION_FLAG_SHAREABLE;
+        }
+    }
+
+out:
+    fslmc_set_cmd_status(&mcp->p.header, status);
+}
+
 static void vfio_msi_interrupt(void *opaque)
 {
     VFIOFSLMCMSIVector *vector = opaque;
@@ -646,7 +695,7 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
      * - MC_CMD_HDR_BASE_VER
      */
     version = fslmc_get_command_version(mcp->p.header);
-    if (version != MC_CMD_HDR_BASE_VER) {
+    if (!(version == MC_CMD_HDR_BASE_VER || version == MC_CMD_HDR_VER_V2)) {
         printf("un-supported command version (%d)\n", version);
         fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_UNSUPPORTED_OP);
         return;
@@ -696,7 +745,11 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
         dprc_handle_get_attr(region, mcp, mc_cmdif);
         break;
     case DPRC_CMD_CODE_GET_OBJ_REG:
-        dprc_get_obj_region(region, mcp, mc_cmdif);
+        if (version == 2) {
+            dprc_get_obj_region_v2(region, mcp, mc_cmdif);
+        } else {
+            dprc_get_obj_region(region, mcp, mc_cmdif);
+        }
         break;
     case DPRC_CMD_CODE_SET_IRQ:
         dprc_set_irq(region, mcp, mc_cmdif);
