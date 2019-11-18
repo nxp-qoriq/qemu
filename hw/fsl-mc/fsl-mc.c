@@ -146,6 +146,46 @@ int fsl_mc_get_portal_ranges(hwaddr *mc_p_addr, hwaddr *mc_p_size,
     return 0;
 }
 
+static FslMcDeviceState *find_root_dprc_device(FslMcBusState *bus)
+{
+    FslMcDeviceState *mcdev = NULL;
+
+    QLIST_FOREACH(mcdev, &bus->device_list, next) {
+        if (mcdev->parent_mcdev == NULL) {
+            return mcdev;
+        }
+    }
+    return NULL;
+}
+
+int fsl_mc_get_root_mc_portal_region(hwaddr *mc_p_addr, hwaddr *mc_p_size)
+{
+    DeviceState *dev;
+    FslMcHostState *host;
+    FslMcDeviceState *mcdev = NULL;
+    hwaddr addr;
+
+    dev = qdev_find_recursive(sysbus_get_default(), TYPE_FSL_MC_HOST);
+    host = FSL_MC_HOST(dev);
+    if (host == NULL) {
+        fprintf(stderr, "No FSL-MC Host bridge found\n");
+        return -ENODEV;
+    }
+
+    mcdev = find_root_dprc_device(&host->bus);
+    if (mcdev == NULL) {
+        return -1;
+    }
+
+    /* Get to the Base of MC-Portal */
+    addr = host->mc_bus_base_addr + host->mc_portals_offset;
+    /* Add the Mc-portal device offset */
+    addr += mcdev->regions[0].offset;
+    *mc_p_addr = addr;
+    *mc_p_size = mcdev->regions[0].size;
+    return 0;
+}
+
 int fsl_mc_register_device_region(FslMcDeviceState *mcdev, int region_num,
                                   MemoryRegion *mem, char *device_type)
 {
