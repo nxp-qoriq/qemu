@@ -780,14 +780,20 @@ int kvm_arm_set_irq(int cpu, int irqtype, int irq, int level)
 }
 
 int kvm_arch_fixup_msi_route(struct kvm_irq_routing_entry *route,
-                             uint64_t address, uint32_t data, PCIDevice *dev)
+                             uint64_t address, uint32_t data, DeviceState *dev)
 {
-    AddressSpace *as = pci_device_iommu_address_space(dev);
+    AddressSpace *as;
     hwaddr xlat, len, doorbell_gpa;
     MemoryRegionSection mrs;
     MemoryRegion *mr;
     int ret = 1;
 
+    /* Not yet implemented for non PCI devices */
+    if (!object_dynamic_cast(OBJECT(dev), TYPE_PCI_DEVICE)) {
+        return 0;
+    }
+
+    as = pci_device_iommu_address_space((PCIDevice *)dev);
     if (as == &address_space_memory) {
         return 0;
     }
@@ -821,7 +827,7 @@ unlock:
 }
 
 int kvm_arch_add_msi_route_post(struct kvm_irq_routing_entry *route,
-                                int vector, PCIDevice *dev)
+                                int vector, DeviceState *dev)
 {
     return 0;
 }
