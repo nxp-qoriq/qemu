@@ -23,6 +23,27 @@
 /* For Linear allocation of device-id */
 static uint32_t device_id;
 
+/* QBMan have many h/w portals and each QBMan h/w portal have two regions
+ *  1) Cache Inhibited (CI) Region of size 0x10000
+ *  2) Cache Enable (CE) Region of size 0x10000
+ * CI regions of all QBMan portals are placed in one contiguous range.
+ * Similarly CE regions of all QBMan portals are also placed in one
+ * contiguous range
+ *
+ * CI regions are at offset 0x0 and
+ * CE regions are placed just after CI regions (offset 0x0x4000000).
+ *
+ * qbman_ce_offset/qbman_ci_offset are  used for linear allocation
+ * in respective regions
+ */
+static uint64_t qbman_ce_offset;
+static uint64_t qbman_ci_offset;
+/* MC portals are in one contiguous range and each mc-portal is
+ * of size 0x10000.
+ * mcportal_offset is used for linear allocation of mc-portal address
+ */
+static uint64_t mcportal_offset;
+
 static Property fsl_mc_props[] = {
     DEFINE_PROP_UINT64("mc_bus_base_addr", FslMcHostState, mc_bus_base_addr, 0),
     DEFINE_PROP_UINT64("mc_portals_offset", FslMcHostState,
@@ -38,6 +59,103 @@ static Property fsl_mc_props[] = {
     DEFINE_PROP_UINT32("mc_bus_devid_num", FslMcHostState, mc_bus_devid_num, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
+
+/* Linear allocation QBMan-portal regions */
+static int fsl_mc_get_qbportal_offset(FslMcHostState *host, off_t *offset,
+                                      int region_index)
+{
+    /* FIXME: Remove assumption that first region is CE */
+    if (region_index == 0) {
+        if (qbman_ce_offset >= FSLMC_QBMAN_PORTALS_CE_SIZE) {
+            return -ENOMEM;
+        }
+
+        *offset = host->qbman_portals_ce_offset + qbman_ce_offset;
+        qbman_ce_offset += FSLMC_QBMAN_REGION_SIZE;
+    } else {
+        if (qbman_ce_offset >= FSLMC_QBMAN_PORTALS_CI_SIZE) {
+            return -ENOMEM;
+        }
+
+        *offset = host->qbman_portals_ci_offset + qbman_ci_offset;
+        qbman_ci_offset += FSLMC_QBMAN_REGION_SIZE;
+    }
+    return 0;
+}
+
+/* Linear allocation mc-portal regions */
+static int fsl_mc_get_mcportal_offset(FslMcHostState *host, off_t *offset)
+{
+    if (mcportal_offset >= host->mc_portals_size) {
+        return -ENOMEM;
+    }
+
+    *offset = host->mc_portals_offset + mcportal_offset;
+    mcportal_offset += FSLMC_MCPORTAL_SIZE;
+    return 0;
+}
+
+int fsl_mc_register_device_region(FslMcDeviceState *mcdev, int region_num,
+                                  MemoryRegion *mem, char *device_type)
+{
+    FslMcBusState *bus;
+    FslMcHostState *host;
+    off_t offset;
+    int ret;
+
+    bus = mcdev->bus;
+    if (bus == NULL) {
+        fprintf(stderr, "FSL-MC Bus not found\n");
+        return -ENODEV;
+    }
+
+    host = FSL_MC_HOST(bus->qbus.parent);
+    if (host == NULL) {
+        fprintf(stderr, "No FSL-MC Host bridge found\n");
+        return -ENODEV;
+    }
+
+    if ((strncmp(device_type, "dprc", 4) == 0) ||
+        (strncmp(device_type, "dpmcp", 5) == 0)) {
+        /* DPRC and DPMCP have only one region */
+        if (region_num >= 1) {
+            return -EINVAL;
+        }
+
+        ret = fsl_mc_get_mcportal_offset(host, &offset);
+        if (ret) {
+            return ret;
+        }
+
+        mcdev->regions[region_num].offset = offset;
+        /* FIXME: H/w exposes 0x40 bytes of 0x10000 mc-portal region.
+         * While region beyond 0x40 (0x40 - 0x10000) is reserved and
+         * not exposed.
+         * Should we expose target page size aligned or only 0x40.
+         */
+        mcdev->regions[region_num].size = FSLMC_MCPORTAL_SIZE;
+        memory_region_add_subregion(&host->mc_portal, offset, mem);
+    } else if (strncmp(device_type, "dpio", 10) == 0) {
+        /* QBman have only two regions (CE and CI) */
+        if (region_num >= 2) {
+            return -EINVAL;
+        }
+
+        ret = fsl_mc_get_qbportal_offset(host, &offset, region_num);
+        if (ret) {
+            return ret;
+        }
+
+        mcdev->regions[region_num].offset = offset;
+        mcdev->regions[region_num].size = FSLMC_QBMAN_REGION_SIZE;
+        memory_region_add_subregion(&host->qbman_portal, offset, mem);
+    } else {
+        fprintf(stderr, "%s: Error No Matching device(%s) found\n",
+                __func__, device_type);
+        return -EINVAL;
+    }
+    return 0;
+}
 
 int fsl_mc_register_device(FslMcDeviceState *mcdev, FslMcDeviceState *pmcdev,
                            char *device_type)
