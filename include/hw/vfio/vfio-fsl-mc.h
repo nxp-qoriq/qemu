@@ -19,8 +19,26 @@
 
 #define TYPE_VFIO_FSL_MC "vfio-fsl-mc"
 
+typedef struct VFIOFSLMCMSIVector {
+    /*
+     * Two interrupt paths are configured per vector.  The first, is only used
+     * for interrupts injected via QEMU.  This is typically the non-accel path,
+     * but may also be used when we want QEMU to handle masking and pending
+     * bits.  The KVM path bypasses QEMU and is therefore higher performance,
+     * but requires masking at the device.  virq is used to track the MSI route
+     * through KVM, thus kvm_interrupt is only available when virq is set to a
+     * valid (>= 0) value.
+     */
+    EventNotifier interrupt;
+    EventNotifier kvm_interrupt;
+    struct VFIOFslmcDevice *vdev; /* back pointer to device */
+    int virq;
+    bool use;
+} VFIOFSLMCMSIVector;
+
 struct VFIOFslMcIrqs {
     uint8_t irq_index;
+    VFIOFSLMCMSIVector *msi_vector;
 };
 
 struct dprc_open_cmd {
