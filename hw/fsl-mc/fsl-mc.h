@@ -74,6 +74,8 @@ typedef struct FslMcHostState {
     uint64_t qbman_portals_ce_size;
     uint64_t qbman_portals_ci_offset;
     uint64_t qbman_portals_ci_size;
+    uint32_t mc_bus_devid_start;
+    uint32_t mc_bus_devid_num;
 } FslMcHostState;
 
 typedef struct FslMcHostClass {
