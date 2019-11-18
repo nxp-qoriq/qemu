@@ -36,7 +36,7 @@ typedef struct MemTxAttrs {
     /* Memory access is usermode (unprivileged) */
     unsigned int user:1;
     /* Requester ID (for MSI for example) */
-    unsigned int requester_id:16;
+    unsigned int requester_id:24;
     /* Invert endianness for this page */
     unsigned int byte_swap:1;
     /*
