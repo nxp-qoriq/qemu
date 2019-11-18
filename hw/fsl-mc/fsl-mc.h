@@ -138,4 +138,6 @@ void fslmc_set_msi_message(FslMcDeviceState *mcdev, MSIMessage msg,
 uint32_t fsl_mc_get_device_id(FslMcDeviceState *mcdev);
 uint64_t fslmc_get_region_addr(FslMcDeviceState *mcdev, uint8_t index);
 uint32_t fslmc_get_region_size(FslMcDeviceState *mcdev, uint8_t index);
+int fsl_mc_get_portal_ranges(hwaddr *mc_p_addr, hwaddr *mc_p_size,
+                             hwaddr *qbman_p_addr, hwaddr *qbman_p_size);
 #endif /* !defined(FSL_MC_FSL_MC_H) */
