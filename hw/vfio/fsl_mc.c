@@ -267,10 +267,25 @@ static void dprc_open(VFIORegion *region, MCPortal *mcp)
         }
     }
 
-    /* Get the dprc opened on this mc-portal */
-    mcportal_vdev = get_mcportal_in_dprc(vdev, portal_id);
+    /*
+     * DPRC command interface can be opened
+     *  1) Using DPRC MC portal
+     *
+     *  2) Using DPMCP device (MC portal of DPMCP)
+     *     Further DPMCP device can be used to open command interface of
+     *      a) Parent DPRC of the given dpmcp
+     *      b) Sibling DPRC of the given dpmcp
+     *      c) Child DPRC of sibling dprc for a given dpmcp and so on.
+     */
+    if ((strncmp(vdev->device_type, "dpmcp", 5) == 0)) {
+        mcportal_vdev = get_mcportal_in_dprc(vdev->parent_vdev, portal_id);
+    } else {
+        mcportal_vdev = get_mcportal_in_dprc(vdev, portal_id);
+    }
+
     if (mcportal_vdev == NULL) {
-        printf("Container (%d) to be opened does not exists\n", portal_id);
+        printf("%s: DPRC_OPEN command request for non existing DPRC(%d)\n",
+               __func__, portal_id);
         goto err;
     }
 
