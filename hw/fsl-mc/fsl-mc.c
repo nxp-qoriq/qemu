@@ -30,6 +30,9 @@ static Property fsl_mc_props[] = {
                        qbman_portals_offset, 0),
     DEFINE_PROP_UINT64("qbman_portals_size", FslMcHostState,
                        qbman_portals_size, 0),
+    DEFINE_PROP_UINT32("mc_bus_devid_start", FslMcHostState,
+                       mc_bus_devid_start, 0),
+    DEFINE_PROP_UINT32("mc_bus_devid_num", FslMcHostState, mc_bus_devid_num, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
 

@@ -184,6 +184,8 @@ static const DeviceIdMap deviceidmap[] = {
      * to device-id mapping is 1:1
      */
     [VIRT_PCIE] =       { 0, 0x10000 },
+    /* FSL MC-BUS */
+    [VIRT_FSL_MC_BUS] = { 0x10000, 0x10000 },
 };
 
 static const char *valid_cpus[] = {
@@ -1326,6 +1328,10 @@ static void create_fsl_mc(VirtMachineState *vms, qemu_irq *pic)
     qdev_prop_set_uint64(dev, "mc_portals_size", FSLMC_MCPORTALS_SIZE);
     qdev_prop_set_uint64(dev, "qbman_portals_offset", FSLMC_MCPORTALS_SIZE);
     qdev_prop_set_uint64(dev, "qbman_portals_size", FSLMC_QBMAN_PORTALS_SIZE);
+    qdev_prop_set_uint32(dev, "mc_bus_devid_start",
+                         vms->deviceidmap[VIRT_FSL_MC_BUS].start);
+    qdev_prop_set_uint32(dev, "mc_bus_devid_num",
+                         vms->deviceidmap[VIRT_FSL_MC_BUS].num);
     qdev_init_nofail(dev);
     sdev = SYS_BUS_DEVICE(dev);
     sysbus_mmio_map(sdev, 0, base);
