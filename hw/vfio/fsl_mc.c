@@ -413,6 +413,11 @@ static void dprc_get_obj_region(VFIORegion *region, MCPortal *mcp,
     resp->size = fslmc_get_region_size(&vdev->mcdev, region_index);
     resp->type = region_type;
     resp->flags = DPRC_REGION_FLAG_CACHE_INHIBIT;
+    if (region_type == DPRC_REGION_TYPE_QBMAN_PORTAL) {
+        if (region_index == 0) {
+            resp->flags = DPRC_REGION_FLAG_CACHEABLE;
+        }
+    }
 
 out:
     fslmc_set_cmd_status(&mcp->p.header, status);
