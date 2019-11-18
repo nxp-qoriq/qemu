@@ -387,11 +387,11 @@ void kvm_arch_on_sigbus_vcpu(CPUState *cpu, int code, void *addr);
 void kvm_arch_init_irq_routing(KVMState *s);
 
 int kvm_arch_fixup_msi_route(struct kvm_irq_routing_entry *route,
-                             uint64_t address, uint32_t data, PCIDevice *dev);
+                             uint64_t address, uint32_t data, DeviceState *dev);
 
 /* Notify arch about newly added MSI routes */
 int kvm_arch_add_msi_route_post(struct kvm_irq_routing_entry *route,
-                                int vector, PCIDevice *dev);
+                                int vector, DeviceState *dev);
 /* Notify arch about released MSI routes */
 int kvm_arch_release_virq_post(int virq);
 
@@ -486,16 +486,18 @@ void kvm_init_cpu_signals(CPUState *cpu);
  * kvm_irqchip_add_msi_route - Add MSI route for specific vector
  * @s:      KVM state
  * @vector: which vector to add. This can be either MSI/MSIX
- *          vector. The function will automatically detect whether
- *          MSI/MSIX is enabled, and fetch corresponding MSI
- *          message.
+ *          vector.
+ * @msg:    MSI message
+ * @devid:  stream ID. It can be equal with PCI requester ID for some
+ *          platforms.
  * @dev:    Owner PCI device to add the route. If @dev is specified
- *          as @NULL, an empty MSI message will be inited.
+ *          as @NULL, an empty MSI message will be passed.
  * @return: virq (>=0) when success, errno (<0) when failed.
  */
-int kvm_irqchip_add_msi_route(KVMState *s, int vector, PCIDevice *dev);
+int kvm_irqchip_add_msi_route(KVMState *s, int vector, MSIMessage msg,
+                              uint32_t devid, DeviceState *dev);
 int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg,
-                                 PCIDevice *dev);
+                                 uint32_t devid, DeviceState *dev);
 void kvm_irqchip_commit_routes(KVMState *s);
 void kvm_irqchip_release_virq(KVMState *s, int virq);
 

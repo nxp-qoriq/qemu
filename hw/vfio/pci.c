@@ -407,6 +407,7 @@ static void vfio_add_kvm_msi_virq(VFIOPCIDevice *vdev, VFIOMSIVector *vector,
                                   int vector_n, bool msix)
 {
     int virq;
+    MSIMessage msg;
 
     if ((msix && vdev->no_kvm_msix) || (!msix && vdev->no_kvm_msi)) {
         return;
@@ -416,7 +417,10 @@ static void vfio_add_kvm_msi_virq(VFIOPCIDevice *vdev, VFIOMSIVector *vector,
         return;
     }
 
-    virq = kvm_irqchip_add_msi_route(kvm_state, vector_n, &vdev->pdev);
+    msg = pci_get_msi_message(&vdev->pdev, vector_n);
+    virq = kvm_irqchip_add_msi_route(kvm_state, vector_n, msg,
+                                     pci_requester_id(&vdev->pdev),
+                                     DEVICE(&vdev->pdev));
     if (virq < 0) {
         event_notifier_cleanup(&vector->kvm_interrupt);
         return;
@@ -444,7 +448,8 @@ static void vfio_remove_kvm_msi_virq(VFIOMSIVector *vector)
 static void vfio_update_kvm_msi_virq(VFIOMSIVector *vector, MSIMessage msg,
                                      PCIDevice *pdev)
 {
-    kvm_irqchip_update_msi_route(kvm_state, vector->virq, msg, pdev);
+    kvm_irqchip_update_msi_route(kvm_state, vector->virq, msg,
+                                 pci_requester_id(pdev), DEVICE(pdev));
     kvm_irqchip_commit_routes(kvm_state);
 }
 
