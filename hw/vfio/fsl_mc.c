@@ -87,11 +87,44 @@ enum mc_cmd_status {
 #define MC_CMD_HDR_NO_VER               0x0
 #define MC_CMD_HDR_BASE_VER             0x1
 
+/* DPRC Commands */
+#define DPRC_CMD_CODE_OPEN             0x805
+#define DPRC_CMD_CODE_CLOSE            0x800
+
+enum mcportal_state {
+    MCPORTAL_CLOSE,
+    MCPORTAL_OPEN
+};
+
+enum fslmc_cmdif_type {
+    CMDIF_OTHER = 0,
+    CMDIF_DPRC = 1,
+    CMDIF_DPMCP = 2
+};
+
+typedef struct VFIOFSLMC_cmdif {
+    struct VFIOFslmcDevice *mcportal_vdev;
+    enum mcportal_state state;
+    uint32_t portal_id;
+    enum fslmc_cmdif_type cmdif_type;
+    uint16_t token;
+    /* DPRC or DPMCP device */
+    QLIST_ENTRY(VFIOFSLMC_cmdif) next;
+} VFIOFSLMC_cmdif;
+
+static QLIST_HEAD(, VFIOFSLMC_cmdif) mc_cmdif_list =
+    QLIST_HEAD_INITIALIZER(mc_cmdif_list);
+
 static inline void fslmc_set_cmd_status(uint64_t *header,
                                         enum mc_cmd_status status)
 {
     *header &= ~CMDHDR_STATUS_MASK;
     *header |= status << CMDHDR_STATUS_SHIFT;
+}
+
+static inline enum mc_cmd_status fslmc_get_cmd_status(uint64_t header)
+{
+    return (header & CMDHDR_STATUS_MASK) >> CMDHDR_STATUS_SHIFT;
 }
 
 /* Return mc command */
@@ -106,11 +139,147 @@ static inline int fslmc_get_command_version(uint64_t header)
                    CMDHDR_CMD_VERSION_SHIFT);
 }
 
+static inline uint16_t fslmc_get_cmd_token(uint64_t header)
+{
+    return (uint16_t)((header & CMDHDR_AUTH_ID_MASK) >> CMDHDR_AUTH_ID_SHIFT);
+}
+
+/* MC portals can only support one outstanding command at a time,
+ * So an MC command must be completed before accepting next command.
+ * TODO: Optimize for actual size of command/response
+ */
+static inline void vfio_fsl_mc_portal_send_cmd(VFIORegion *region,
+                                               MCPortal *mcp)
+{
+    VFIODevice *vbasedev = region->vbasedev;
+    uint64_t *p = &mcp->portal[0];
+    int fd = vbasedev->fd;
+
+    /* Send complete command to VFIO kernel driver */
+    if (pwrite(fd, p, sizeof(*mcp), region->fd_offset) != sizeof(*mcp)) {
+        error_report("%s(%s:pwrite: region%d+0x%x, 0x%"PRIx64 ",%lx) failed: %m",
+                     __func__, vbasedev->name, region->nr, 0, *p, sizeof(*mcp));
+    }
+
+    /* Read Response from VFIO kernel driver */
+    if (pread(fd, p, sizeof(*mcp), region->fd_offset) != sizeof(*mcp)) {
+        error_report("%s(%s:pread: region%d+0x%x, 0x%"PRIx64 ",%lx) failed: %m",
+                     __func__, vbasedev->name, region->nr, 0, *p, sizeof(*mcp));
+    }
+}
+
+static VFIOFslmcDevice *get_mcportal_in_dprc(VFIOFslmcDevice *vdev, int portal_id)
+{
+    VFIOFslmcDevice *mcportal_vdev;
+
+    /* This must be dprc device */
+    if (strcmp(vdev->device_type, "dprc")) {
+        return NULL;
+    }
+
+    /* DPRC device itself */
+    if (vdev->id == portal_id) {
+        return vdev;
+    }
+
+    /* One of child mcportal device in the container */
+    QLIST_FOREACH(mcportal_vdev, &vdev->device_list, next) {
+        if (((strncmp(mcportal_vdev->device_type, "dprc", 4) == 0) ||
+            (strncmp(mcportal_vdev->device_type, "dpmcp", 5) == 0)) &&
+            (mcportal_vdev->id == portal_id)) {
+            return mcportal_vdev;
+        }
+    }
+    return NULL;
+}
+
+static int fslmc_auth_cmd(uint16_t token)
+{
+    VFIOFSLMC_cmdif *mc_cmdif;
+
+    QLIST_FOREACH(mc_cmdif, &mc_cmdif_list, next) {
+        if (mc_cmdif->token == token) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static void dprc_open(VFIORegion *region, MCPortal *mcp)
+{
+    VFIODevice *vbasedev = region->vbasedev;
+    VFIOFslmcDevice *vdev =
+        container_of(vbasedev, VFIOFslmcDevice, vbasedev);
+    VFIOFslmcDevice *mcportal_vdev = NULL;
+    struct dprc_open_cmd *cmd = (struct dprc_open_cmd *)&mcp->p.data[0];
+    uint32_t portal_id = cmd->container_id;
+    uint16_t token;
+    VFIOFSLMC_cmdif *mc_cmdif;
+
+    vfio_fsl_mc_portal_send_cmd(region, mcp);
+    if (fslmc_get_cmd_status(mcp->p.header) != MC_CMD_STATUS_OK) {
+        return;
+    }
+
+    token = fslmc_get_cmd_token(mcp->p.header);
+    QLIST_FOREACH(mc_cmdif, &mc_cmdif_list, next) {
+        if (mc_cmdif->token == token) {
+            printf("Instance already opened\n");
+            goto err;
+        }
+    }
+
+    /* Get the dprc opened on this mc-portal */
+    mcportal_vdev = get_mcportal_in_dprc(vdev, portal_id);
+    if (mcportal_vdev == NULL) {
+        printf("Container (%d) to be opened does not exists\n", portal_id);
+        goto err;
+    }
+
+    mc_cmdif = g_new0(VFIOFSLMC_cmdif, 1);
+    mc_cmdif->token = token;
+    mc_cmdif->mcportal_vdev = mcportal_vdev;
+    mc_cmdif->state = MCPORTAL_OPEN;
+    mc_cmdif->cmdif_type = CMDIF_DPRC;
+    QLIST_INSERT_HEAD(&mc_cmdif_list, mc_cmdif, next);
+    return;
+
+err:
+    fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_NO_RESOURCE);
+}
+
+static void dprc_close(VFIORegion *region, MCPortal *mcp, uint16_t token)
+{
+    VFIOFSLMC_cmdif *mc_cmdif;
+
+    vfio_fsl_mc_portal_send_cmd(region, mcp);
+    if (fslmc_get_cmd_status(mcp->p.header) != MC_CMD_STATUS_OK) {
+        return;
+    }
+
+    QLIST_FOREACH(mc_cmdif, &mc_cmdif_list, next) {
+        if (mc_cmdif->token == token) {
+            break;
+        }
+    }
+
+    if (mc_cmdif == NULL) {
+        printf("No mc_cmdif found\n");
+        return;
+    }
+
+    mc_cmdif->state = MCPORTAL_CLOSE;
+    mc_cmdif->token = 0;
+    mc_cmdif->mcportal_vdev = NULL;
+    QLIST_REMOVE(mc_cmdif, next);
+}
+
 static void vfio_handle_fslmc_command(VFIORegion *region,
                                       VFIOFslmcDevice *vdev)
 {
     MCPortal *mcp = &vdev->mcportal;
     int cmd = fslmc_get_cmd(mcp->p.header);
+    uint16_t token = fslmc_get_cmd_token(mcp->p.header);
 
     /* We support MC f/w 10.0.0 and above */
     if (fslmc_get_command_version(mcp->p.header) == MC_CMD_HDR_NO_VER) {
@@ -118,7 +287,20 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
         return;
     }
 
+    if ((cmd != DPRC_CMD_CODE_OPEN)) {
+        if (fslmc_auth_cmd(token)) {
+            fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_AUTH_ERR);
+            return;
+        }
+    }
+
     switch (cmd) {
+    case DPRC_CMD_CODE_OPEN:
+        dprc_open(region, mcp);
+        break;
+    case DPRC_CMD_CODE_CLOSE:
+        dprc_close(region, mcp, token);
+        break;
     default:
         printf("%s: Unsupported MC Command %x\n", __func__, cmd);
         fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_UNSUPPORTED_OP);
