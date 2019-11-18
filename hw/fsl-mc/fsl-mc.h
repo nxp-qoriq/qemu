@@ -2,7 +2,7 @@
  * Freescale Management Complex (MC) device
  *
  * Copyright 2015-2016 Freescale Semiconductor, Inc.
- * Copyright 2017 NXP
+ * Copyright 2017-2019 NXP
  *
  * Author: Bharat Bhushan <bharat.bhushan@nxp.com>
  *
@@ -36,8 +36,10 @@
 #define FSLMC_QBMAN_PORTALS_CI_SIZE (FSLMC_QBMAN_REGION_SIZE * \
                                        FSLMC_QBMAN_NUM_PORTALS)
 #define FSLMC_QBMAN_PORTALS_CE_SIZE (FSLMC_QBMAN_PORTALS_CI_SIZE)
+#define FSLMC_QBMAN_PORTALS_CESH_SIZE (FSLMC_QBMAN_PORTALS_CI_SIZE)
 #define FSLMC_QBMAN_PORTALS_SIZE (FSLMC_QBMAN_PORTALS_CI_SIZE + \
-                                  FSLMC_QBMAN_PORTALS_CE_SIZE)
+                                  FSLMC_QBMAN_PORTALS_CE_SIZE + \
+                                  FSLMC_QBMAN_PORTALS_CESH_SIZE)
 
 #define FSLMC_HOST_SYSFS_PATH  "/sys/bus/fsl-mc/devices/"
 #define FSLMC_DEV_SYSPATH_LEN 100
@@ -70,6 +72,8 @@ typedef struct FslMcHostState {
     MemoryRegion qbman_portal;
     uint64_t qbman_portals_offset;
     uint64_t qbman_portals_size;
+    uint64_t qbman_portals_cesh_offset;
+    uint64_t qbman_portals_cesh_size;
     uint64_t qbman_portals_ce_offset;
     uint64_t qbman_portals_ce_size;
     uint64_t qbman_portals_ci_offset;
