@@ -3,7 +3,7 @@
  * Management Complex (FSL_MC) devices
  *
  * Copyright 2015-2016 Freescale Semiconductor, Inc.
- * Copyright 2017 NXP
+ * Copyright 2017-2019 NXP
  *
  * Author: Bharat Bhushan <bharat.bhushan@nxp.com>
  *
@@ -639,9 +639,15 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
     int cmd = fslmc_get_cmd(mcp->p.header);
     uint16_t token = fslmc_get_cmd_token(mcp->p.header);
     VFIOFSLMC_cmdif *mc_cmdif = NULL;
+    int version;
 
-    /* We support MC f/w 10.0.0 and above */
-    if (fslmc_get_command_version(mcp->p.header) == MC_CMD_HDR_NO_VER) {
+    /* Supported MC f/w version - 10.0.0 and above
+     * supported MC-command version:
+     * - MC_CMD_HDR_BASE_VER
+     */
+    version = fslmc_get_command_version(mcp->p.header);
+    if (version != MC_CMD_HDR_BASE_VER) {
+        printf("un-supported command version (%d)\n", version);
         fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_UNSUPPORTED_OP);
         return;
     }
