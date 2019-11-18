@@ -80,6 +80,17 @@ struct dprc_get_irq_resp {
     uint32_t irq_type;
 };
 
+struct dprc_set_obj_irq_cmd {
+    uint32_t irq_val;
+    uint8_t irq_index;
+    uint8_t reserved1;
+    uint16_t reserved2;
+    uint64_t irq_addr;
+    uint32_t irq_num;
+    uint32_t obj_id;
+    char obj_type[16];
+};
+
 typedef union {
     uint64_t portal[8];
     struct {
