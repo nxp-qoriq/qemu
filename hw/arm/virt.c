@@ -64,6 +64,7 @@
 #include "hw/arm/smmuv3.h"
 #include "hw/acpi/acpi.h"
 #include "target/arm/internals.h"
+#include "hw/fsl-mc/fsl-mc.h"
 
 #define DEFINE_VIRT_MACHINE_LATEST(major, minor, latest) \
     static void virt_##major##_##minor##_class_init(ObjectClass *oc, \
@@ -159,6 +160,8 @@ static MemMapEntry extended_memmap[] = {
     /* Additional 64 MB redist region (can contain up to 512 redistributors) */
     [VIRT_HIGH_GIC_REDIST2] =   { 0x0, 64 * MiB },
     [VIRT_HIGH_PCIE_ECAM] =     { 0x0, 256 * MiB },
+    /* Freescale MC-BUS 1GB space */
+    [VIRT_FSL_MC_BUS] =         { 0x0, 1 * GiB },
     /* Second PCIe window */
     [VIRT_HIGH_PCIE_MMIO] =     { 0x0, 512 * GiB },
 };
@@ -1309,6 +1312,26 @@ static void create_platform_bus(VirtMachineState *vms, qemu_irq *pic)
                                 sysbus_mmio_get_region(s, 0));
 }
 
+static void create_fsl_mc(VirtMachineState *vms, qemu_irq *pic)
+{
+    hwaddr base = vms->memmap[VIRT_FSL_MC_BUS].base;
+    DeviceState *dev;
+    SysBusDevice *sdev;
+
+    dev = qdev_create(NULL, TYPE_FSL_MC_HOST);
+    dev->id = TYPE_FSL_MC_HOST;
+    /* QBman portals are placed after MC portals */
+    qdev_prop_set_uint64(dev, "mc_bus_base_addr", base);
+    qdev_prop_set_uint64(dev, "mc_portals_offset", 0x0);
+    qdev_prop_set_uint64(dev, "mc_portals_size", FSLMC_MCPORTALS_SIZE);
+    qdev_prop_set_uint64(dev, "qbman_portals_offset", FSLMC_MCPORTALS_SIZE);
+    qdev_prop_set_uint64(dev, "qbman_portals_size", FSLMC_QBMAN_PORTALS_SIZE);
+    qdev_init_nofail(dev);
+    sdev = SYS_BUS_DEVICE(dev);
+    sysbus_mmio_map(sdev, 0, base);
+    sysbus_mmio_map(sdev, 1, base + FSLMC_MCPORTALS_SIZE);
+}
+
 static void create_secure_ram(VirtMachineState *vms,
                               MemoryRegion *secure_sysmem)
 {
@@ -1711,6 +1734,8 @@ static void machvirt_init(MachineState *machine)
 
     vms->fw_cfg = create_fw_cfg(vms, &address_space_memory);
     rom_set_fw(vms->fw_cfg);
+
+    create_fsl_mc(vms, pic);
 
     create_platform_bus(vms, pic);
 
