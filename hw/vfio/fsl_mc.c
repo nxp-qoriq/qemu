@@ -92,6 +92,7 @@ enum mc_cmd_status {
 #define DPRC_CMD_CODE_CLOSE            0x800
 #define DPRC_CMD_CODE_GET_ATTR         0x004
 #define DPRC_CMD_CODE_GET_OBJ_REG      0x15E
+#define DPRC_CMD_CODE_SET_IRQ          0x010
 
 enum mcportal_state {
     MCPORTAL_CLOSE,
@@ -361,6 +362,35 @@ out:
     fslmc_set_cmd_status(&mcp->p.header, status);
 }
 
+static int vfio_set_kvm_msi_irqfd(VFIOFslmcDevice *vdev, uint8_t irq_index)
+{
+    /* Add fast-path with KVM IRQFD */
+    return -1;
+}
+
+static void dprc_set_irq(VFIORegion *region, MCPortal *mcp,
+                         VFIOFSLMC_cmdif *mc_cmdif)
+{
+    VFIOFslmcDevice *vdev = mc_cmdif->mcportal_vdev;
+    struct dprc_set_irq_cmd *cmd = (struct dprc_set_irq_cmd *)&mcp->p.data[0];
+    uint8_t irq_index;
+    MSIMessage msg;
+    int ret;
+
+    irq_index = cmd->irq_index;
+
+    msg.data = cmd->irq_val;
+
+    fslmc_set_msi_message(&vdev->mcdev, msg, irq_index);
+
+    ret = vfio_set_kvm_msi_irqfd(vdev, irq_index);
+    if (ret) {
+        fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_INVALID_STATE);
+        return;
+    }
+    fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_OK);
+}
+
 static void vfio_handle_fslmc_command(VFIORegion *region,
                                       VFIOFslmcDevice *vdev)
 {
@@ -395,6 +425,9 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
         break;
     case DPRC_CMD_CODE_GET_OBJ_REG:
         dprc_get_obj_region(region, mcp, mc_cmdif);
+        break;
+    case DPRC_CMD_CODE_SET_IRQ:
+        dprc_set_irq(region, mcp, mc_cmdif);
         break;
     default:
         printf("%s: Unsupported MC Command %x\n", __func__, cmd);
