@@ -23,21 +23,32 @@
 /* For Linear allocation of device-id */
 static uint32_t device_id;
 
-/* QBMan have many h/w portals and each QBMan h/w portal have two regions
- *  1) Cache Inhibited (CI) Region of size 0x10000
- *  2) Cache Enable (CE) Region of size 0x10000
- * CI regions of all QBMan portals are placed in one contiguous range.
- * Similarly CE regions of all QBMan portals are also placed in one
- * contiguous range
+/* QBMan have 1024 h/w portals and each QBMan h/w portal have three
+ * address region:
+ *  1) Cache Inhibited (CI) region of size 0x10000
+ *  2) Cache Enable and non-shareable (CE_NS) region of size 0x10000
+ *  3) Cache Enable and Shareable (CE_SH) region of size 0x10000
  *
- * CI regions are at offset 0x0 and
- * CE regions are placed just after CI regions (offset 0x0x4000000).
+ * CI regions of all QBMan portals are placed in contiguous address range.
+ * Similarly CE_NS and CE_SH regions of all QBMan portals are also placed
+ * in respective contiguous address ranges.
  *
- * qbman_ce_offset/qbman_ci_offset are  used for linear allocation
- * in respective regions
+ * CI address range starts from offset 0x0 of QBman address-space, CE_NS
+ * address range is placed just after CI address space and CE_SH address
+ * range is placed just after CE_NS address range.
+ *
+ * To support 1024 QBMan portals following ranges are defined:
+ * CI address range = offset-0x0 to 0x4000000
+ * CE_NS address range = offset-0x4000000 to 0x8000000
+ * CE_SH address range = offset-0x8000000 to 0xC000000
+ *
+ * qbman_ci_offset, qbman_ce_offset and qbman_cesh_offset are  used for
+ * linear allocation in respective address range .
  */
 static uint64_t qbman_ce_offset;
 static uint64_t qbman_ci_offset;
+static uint64_t qbman_cesh_offset;
+
 /* MC portals are in one contiguous range and each mc-portal is
  * of size 0x10000.
  * mcportal_offset is used for linear allocation of mc-portal address
@@ -95,7 +106,11 @@ uint32_t fslmc_get_region_size(FslMcDeviceState *mcdev, uint8_t index)
 static int fsl_mc_get_qbportal_offset(FslMcHostState *host, off_t *offset,
                                       int region_index)
 {
-    /* FIXME: Remove assumption that first region is CE */
+    /* FIXME: Current implementation assumes
+     * First region of QBman poratl is Cacheable and non-shareable (CE_NS)
+     * Second region of QBman poratl is Cache-Inhibited (CI)
+     * Third region of QBman poratl is Cacheable and shareable (CE_SH)
+     * Remove assumption that first region is CE */
     if (region_index == 0) {
         if (qbman_ce_offset >= FSLMC_QBMAN_PORTALS_CE_SIZE) {
             return -ENOMEM;
@@ -103,13 +118,20 @@ static int fsl_mc_get_qbportal_offset(FslMcHostState *host, off_t *offset,
 
         *offset = host->qbman_portals_ce_offset + qbman_ce_offset;
         qbman_ce_offset += FSLMC_QBMAN_REGION_SIZE;
-    } else {
-        if (qbman_ce_offset >= FSLMC_QBMAN_PORTALS_CI_SIZE) {
+    } else if (region_index == 1) {
+        if (qbman_ci_offset >= FSLMC_QBMAN_PORTALS_CI_SIZE) {
             return -ENOMEM;
         }
 
         *offset = host->qbman_portals_ci_offset + qbman_ci_offset;
         qbman_ci_offset += FSLMC_QBMAN_REGION_SIZE;
+    } else {
+        if (qbman_cesh_offset >= FSLMC_QBMAN_PORTALS_CESH_SIZE) {
+            return -ENOMEM;
+        }
+
+        *offset = host->qbman_portals_cesh_offset + qbman_cesh_offset;
+        qbman_cesh_offset += FSLMC_QBMAN_REGION_SIZE;
     }
     return 0;
 }
@@ -227,8 +249,8 @@ int fsl_mc_register_device_region(FslMcDeviceState *mcdev, int region_num,
         mcdev->regions[region_num].size = FSLMC_MCPORTAL_SIZE;
         memory_region_add_subregion(&host->mc_portal, offset, mem);
     } else if (strncmp(device_type, "dpio", 10) == 0) {
-        /* QBman have only two regions (CE and CI) */
-        if (region_num >= 2) {
+        /* QBman have only three regions (CE_NS, CI and CE_SH) */
+        if (region_num >= 3) {
             return -EINVAL;
         }
 
@@ -379,27 +401,32 @@ static void fsl_mc_host_realize(DeviceState *dev, Error **errp)
     }
 
     /*
-     * QBMan have many h/w portals and each QBMan h/w portal
-     * have two regions
-     *  1) Cache Inhibited (CI) Region of size 0x10000
-     *  2) Cache Enable (CE) Region of size 0x10000
-     * CI regions of all QBMan portals are placed in
-     * one contiguous range. Similarly CE regions of all
-     * QBMan portals are also placed in one contiguous range
+     * QBMan have 1024 h/w portals and each QBMan h/w portal have three
+     * address region:
+     *  1) Cache Inhibited (CI) region of size 0x10000
+     *  2) Cache Enable (CE_NS) region of size 0x10000
+     *  3) Cache Enable and Shareable (CE_SH) region of size 0x10000
      *
-     * To support 1024 QBMan portals following range
-     * is defined:
-     * CI regions size = 0x10000 * 1024 = 0x4000000
-     * CE regions size = 0x10000 * 1024 = 0x4000000
+     * CI regions of all QBMan portals are placed in contiguous address range.
+     * Similarly CE_NS and CE_SH regions of all QBMan portals are also placed
+     * in respective contiguous address ranges.
+     * CI address range starts from offset 0x0 of QBman address-space, CE_NS
+     * address range is placed just after CI address space and CE_SH address
+     * range is placed just after CE_NS address range.
      *
-     * CI regions are at offset 0x0 and CE regions are placed
-     * just after CI regions (offset 0x0x4000000).
+     * To support 1024 QBMan portals following ranges are defined:
+     * CI address range = offset-0x0 to 0x4000000
+     * CE_NS address range = offset-0x4000000 to 0x8000000
+     * CE_SH address range = offset-0x8000000 to 0xC000000
      */
     s->qbman_portals_ci_offset = 0x0;
     s->qbman_portals_ci_size = FSLMC_QBMAN_PORTALS_CI_SIZE;
     s->qbman_portals_ce_offset = s->qbman_portals_ci_offset +
                                   FSLMC_QBMAN_PORTALS_CI_SIZE;
     s->qbman_portals_ce_size = FSLMC_QBMAN_PORTALS_CE_SIZE;
+    s->qbman_portals_cesh_offset = s->qbman_portals_ce_offset +
+                                    FSLMC_QBMAN_PORTALS_CE_SIZE;
+    s->qbman_portals_cesh_size = FSLMC_QBMAN_PORTALS_CESH_SIZE;
 
     memory_region_init_io(&s->mc_portal, OBJECT(s), NULL, s,
                           "fsl_mc portal", s->mc_portals_size);
