@@ -36,6 +36,37 @@ static Property fsl_mc_props[] = {
     DEFINE_PROP_END_OF_LIST(),
 };
 
+int fsl_mc_register_device(FslMcDeviceState *mcdev, FslMcDeviceState *pmcdev,
+                           char *device_type)
+{
+    FslMcBusState *bus;
+    FslMcDeviceState *ds;
+    FslMcHostState *host;
+
+    bus = mcdev->bus;
+    if (bus == NULL) {
+        fprintf(stderr, "No FSL-MC Bus found\n");
+        return -ENODEV;
+    }
+
+    /* Check if device already registered */
+    QLIST_FOREACH(ds, &bus->device_list, next) {
+        if (ds == mcdev) {
+            return -EEXIST;
+        }
+    }
+
+    host = FSL_MC_HOST(bus->qbus.parent);
+    if (host == NULL) {
+        fprintf(stderr, "No FSL-MC Host bridge found\n");
+        return -ENODEV;
+    }
+
+    mcdev->parent_mcdev = pmcdev;
+    QLIST_INSERT_HEAD(&bus->device_list, mcdev, next);
+    return 0;
+}
+
 static void fsl_mc_dev_unrealize(DeviceState *qdev, Error **errp)
 {
     FslMcDeviceState *mcdev = (FslMcDeviceState *)qdev;

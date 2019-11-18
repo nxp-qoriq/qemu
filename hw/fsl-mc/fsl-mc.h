@@ -95,6 +95,7 @@ typedef struct FslMcDeviceState {
     /*< public >*/
     DeviceState qdev;
     FslMcBusState *bus;
+    struct FslMcDeviceState *parent_mcdev;
     QLIST_ENTRY(FslMcDeviceState) next;
 } FslMcDeviceState;
 
@@ -106,4 +107,6 @@ typedef struct FslMcDeviceClass {
     int (*exit)(FslMcDeviceState *mcdev);
 } FslMcDeviceClass;
 
+int fsl_mc_register_device(FslMcDeviceState *mcdev, FslMcDeviceState *pmcdev,
+                           char *device_type);
 #endif /* !defined(FSL_MC_FSL_MC_H) */
