@@ -23,12 +23,21 @@ struct VFIOFslMcIrqs {
     uint8_t irq_index;
 };
 
+typedef union {
+    uint64_t portal[8];
+    struct {
+        uint64_t header;
+        uint64_t data[7];
+    } p;
+} MCPortal;
+
 typedef struct VFIOFslmcDevice {
     FslMcDeviceState mcdev;
     VFIODevice vbasedev; /* not a QOM object */
     VFIORegion **regions;
     struct VFIOFslMcIrqs **irqs;
     void *parent_vdev;
+    MCPortal mcportal;
     char device_type[10];
     uint16_t id;
     int32_t bootindex;

@@ -32,21 +32,242 @@
 static QLIST_HEAD(, VFIOFslmcDevice) root_dprc_list =
     QLIST_HEAD_INITIALIZER(root_dprc_list);
 
-static void vfio_fsl_mc_region_write(void *opaque, hwaddr addr,
-                              uint64_t data, unsigned size)
+enum mc_cmd_status {
+    MC_CMD_STATUS_OK = 0x0, /* Completed successfully */
+    MC_CMD_STATUS_READY = 0x1, /* Ready to be processed */
+    MC_CMD_STATUS_AUTH_ERR = 0x3, /* Authentication error */
+    MC_CMD_STATUS_NO_PRIVILEGE = 0x4, /* No privilege */
+    MC_CMD_STATUS_DMA_ERR = 0x5, /* DMA or I/O error */
+    MC_CMD_STATUS_CONFIG_ERR = 0x6, /* Configuration error */
+    MC_CMD_STATUS_TIMEOUT = 0x7, /* Operation timed out */
+    MC_CMD_STATUS_NO_RESOURCE = 0x8, /* No resources */
+    MC_CMD_STATUS_NO_MEMORY = 0x9, /* No memory available */
+    MC_CMD_STATUS_BUSY = 0xA, /* Device is busy */
+    MC_CMD_STATUS_UNSUPPORTED_OP = 0xB, /* Unsupported operation */
+    MC_CMD_STATUS_INVALID_STATE = 0xC /* Invalid state */
+};
+
+/* command header masks and shifts */
+#define CMDHDR_SRCID_MASK               0x00000000000000FF
+#define CMDHDR_PRIORITY_MASK            0x0000000000008000
+#define CMDHDR_STATUS_MASK              0x0000000000FF0000
+#define CMDHDR_INTR_DIS_MASK            0x0000000001000000
+#define CMDHDR_AUTH_ID_MASK             0x0000FFFF00000000
+#define CMDHDR_CMD_CODE_MASK            0xFFF0000000000000
+#define CMDHDR_CMD_CODE_VERSION_MASK    0x000F000000000000
+
+#define CMDHDR_CMD_ID_O                 48 /* Command ID (code + version) field offset */
+#define CMDHDR_CMD_ID_S                 16 /* Command ID (code + version) field size */
+#define CMDHDR_CMD_CODE_O               52 /* Command code field offset */
+#define CMDHDR_CMD_CODE_S               12 /* Command code field size */
+#define CMDHDR_CMD_VER_O                48 /* Command ver field offset */
+#define CMDHDR_CMD_VER_S                4  /* Command ver field size */
+#define CMDHDR_AUTH_ID_O                32 /* Authentication ID field offset */
+#define CMDHDR_AUTH_ID_S                16 /* Authentication ID field size */
+#define CMDHDR_INTR_DIS_O               24 /* Interrupt disable filed offset*/
+#define CMDHDR_INTR_DIS_S               1  /* Interrupt disable filed size*/
+#define CMDHDR_STATUS_O                 16 /* Status field offset */
+#define CMDHDR_STATUS_S                 8  /* Status field size*/
+#define CMDHDR_PRI_O                    15 /* Priority field offset */
+#define CMDHDR_PRI_S                    1  /* Priority field size */
+#define CMDHDR_SRCID_O                  0  /* Src id field offset */
+#define CMDHDR_SRCID_S                  8  /* Src id field size */
+
+#define CMDHDR_PRIORITY_SHIFT           CMDHDR_PRI_O
+#define CMDHDR_STATUS_SHIFT             CMDHDR_STATUS_O
+#define CMDHDR_INTR_DIS_SHIFT           CMDHDR_INTR_DIS_O
+#define CMDHDR_AUTH_ID_SHIFT            CMDHDR_AUTH_ID_O
+#define CMDHDR_CMD_CODE_SHIFT           CMDHDR_CMD_CODE_O
+#define CMDHDR_CMD_VERSION_SHIFT        CMDHDR_CMD_VER_O
+
+/* MC command versioning
+ * 0 : command version with mc f/w below 10.0.0
+ * 1 : command version with mc f/w above (including) 10.0.0
+ */
+#define MC_CMD_HDR_NO_VER               0x0
+#define MC_CMD_HDR_BASE_VER             0x1
+
+static inline void fslmc_set_cmd_status(uint64_t *header,
+                                        enum mc_cmd_status status)
 {
+    *header &= ~CMDHDR_STATUS_MASK;
+    *header |= status << CMDHDR_STATUS_SHIFT;
 }
 
-static uint64_t vfio_fsl_mc_region_read(void *opaque,
-                                 hwaddr addr, unsigned size)
+/* Return mc command */
+static inline int fslmc_get_cmd(uint64_t header)
 {
-    return 0;
+    return (int) ((header & CMDHDR_CMD_CODE_MASK) >> CMDHDR_CMD_CODE_SHIFT);
+}
+
+static inline int fslmc_get_command_version(uint64_t header)
+{
+    return (int) ((header & CMDHDR_CMD_CODE_VERSION_MASK) >>
+                   CMDHDR_CMD_VERSION_SHIFT);
+}
+
+static void vfio_handle_fslmc_command(VFIORegion *region,
+                                      VFIOFslmcDevice *vdev)
+{
+    MCPortal *mcp = &vdev->mcportal;
+    int cmd = fslmc_get_cmd(mcp->p.header);
+
+    /* We support MC f/w 10.0.0 and above */
+    if (fslmc_get_command_version(mcp->p.header) == MC_CMD_HDR_NO_VER) {
+        fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_UNSUPPORTED_OP);
+        return;
+    }
+
+    switch (cmd) {
+    default:
+        printf("%s: Unsupported MC Command %x\n", __func__, cmd);
+        fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_UNSUPPORTED_OP);
+        break;
+    }
+}
+
+/* Each MC Portals are of 64kB size and first 64B are used for
+ * command/response. Accesses outside the 64 bytes of the portal
+ * are not permitted
+ *
+ * MC Command format
+ *  8 Bytes (Offset 0 to 7) - command header
+ *  56 Bytes (Offset 8 - 63) - Command Data
+ *
+ * MC command is complete when status is written in cmoomand header.
+ */
+static void vfio_fsl_mc_prepare_cmd(VFIORegion *region, hwaddr offset,
+                                  unsigned size, uint64_t value)
+{
+    VFIODevice *vbasedev = region->vbasedev;
+    VFIOFslmcDevice *vdev =
+        container_of(vbasedev, VFIOFslmcDevice, vbasedev);
+    uint64_t data = value;
+
+    if (size == 4) {
+        data = vdev->mcportal.portal[offset / 8];
+        if (offset & 4) {
+            data &= 0x00000000FFFFFFFFULL;
+            data |= (value << 32);
+        } else {
+            data &= 0xFFFFFFFF00000000ULL;
+            data |= value;
+        }
+    }
+
+    vdev->mcportal.portal[offset / 8] = data;
+
+    /* Handle when mc command is complete */
+    if ((size == 8 && !offset) || (offset == 0x0)) {
+        vfio_handle_fslmc_command(region, vdev);
+    }
+}
+
+static uint64_t vfio_fsl_mc_portal_read(VFIODevice *vbasedev, hwaddr offset)
+{
+    uint64_t value;
+    VFIOFslmcDevice *vdev =
+        container_of(vbasedev, VFIOFslmcDevice, vbasedev);
+
+    value = vdev->mcportal.portal[offset / 8];
+
+    return value;
+}
+
+static uint64_t vfio_fsl_mc_region_read(void *opaque, hwaddr offset,
+                                        unsigned size)
+{
+    VFIORegion *region = opaque;
+    VFIODevice *vbasedev = region->vbasedev;
+    VFIOFslmcDevice *vdev =
+        container_of(vbasedev, VFIOFslmcDevice, vbasedev);
+    union {
+        uint32_t dword;
+        uint64_t qword;
+    } buf;
+    uint64_t data = 0;
+
+    /* Support read on DPRC devices only */
+    if (strncmp(vdev->device_type, "dprc", 4)) {
+        printf("Read to device (%s) type not supported", vdev->device_type);
+        return 0;
+    }
+
+    /* Accesses outside the 64 bytes of the portal are not permitted */
+    if (offset > 64 || ((offset + size) > 64)) {
+        printf("vfio: unsupported read to offset, %lx\n", offset);
+        /* FIXME: How MC f/w respond ? Behave like MC f/w */
+        return 0;
+    }
+
+    buf.qword = vfio_fsl_mc_portal_read(vbasedev, offset);
+
+    switch (size) {
+    case 4:
+        data = le32_to_cpu(buf.dword);
+        break;
+    case 8:
+        data = le64_to_cpu(buf.qword);
+        break;
+    default:
+        hw_error("vfio: unsupported read size, %d bytes", size);
+        break;
+    }
+
+    return data;
+}
+
+static void vfio_fsl_mc_region_write(void *opaque, hwaddr offset,
+                              uint64_t data, unsigned size)
+{
+    VFIORegion *region = opaque;
+    VFIODevice *vbasedev = region->vbasedev;
+    VFIOFslmcDevice *vdev =
+        container_of(vbasedev, VFIOFslmcDevice, vbasedev);
+    union {
+        uint32_t dword;
+        uint64_t qword;
+    } buf;
+
+    /* Support read on DPRC devices only */
+    if (strncmp(vdev->device_type, "dprc", 4)) {
+        printf("Write to device (%s) not supported", vdev->device_type);
+        return;
+    }
+
+    /* Accesses outside the 64 bytes of portal are not permitted */
+    if (offset > 64 || ((offset + size) > 64)) {
+        printf("vfio: unsupported write to offset, %lx\n", offset);
+        /* FIXME: How MC f/w respond ? Behave like MC f/w */
+        return;
+    }
+
+    switch (size) {
+    case 4:
+        buf.dword = cpu_to_le32(data);
+        break;
+    case 8:
+        buf.qword = cpu_to_le64(data);
+        break;
+    default:
+        hw_error("vfio: unsupported write size, %d bytes", size);
+        break;
+    }
+    vfio_fsl_mc_prepare_cmd(region, offset, size, buf.qword);
 }
 
 const MemoryRegionOps vfio_region_fsl_mc_ops = {
     .read = vfio_fsl_mc_region_read,
     .write = vfio_fsl_mc_region_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 8,
+    },
+    .impl = {
+        .min_access_size = 4,
+        .max_access_size = 8,
+    },
 };
 
 /**
