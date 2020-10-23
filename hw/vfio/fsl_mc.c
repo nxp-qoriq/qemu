@@ -87,6 +87,7 @@ enum mc_cmd_status {
 #define MC_CMD_HDR_NO_VER               0x0
 #define MC_CMD_HDR_BASE_VER             0x1
 #define MC_CMD_HDR_VER_V2               0x2
+#define MC_CMD_HDR_VER_V3               0x3
 
 /* DPRC Commands */
 #define DPRC_CMD_CODE_OPEN             0x805
@@ -715,7 +716,7 @@ static void vfio_handle_fslmc_command(VFIORegion *region,
      * - MC_CMD_HDR_BASE_VER
      */
     version = fslmc_get_command_version(mcp->p.header);
-    if (!(version == MC_CMD_HDR_BASE_VER || version == MC_CMD_HDR_VER_V2)) {
+    if (!(version == MC_CMD_HDR_BASE_VER || version == MC_CMD_HDR_VER_V2 || version == MC_CMD_HDR_VER_V3)) {
         printf("un-supported command version (%d)\n", version);
         fslmc_set_cmd_status(&mcp->p.header, MC_CMD_STATUS_UNSUPPORTED_OP);
         return;
