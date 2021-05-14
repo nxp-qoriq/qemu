@@ -3,7 +3,7 @@
  * Management Complex (FSL_MC) devices
  *
  * Copyright 2015-2016 Freescale Semiconductor, Inc.
- * Copyright 2017-2019 NXP
+ * Copyright 2017-2019, 2021 NXP
  *
  * Author: Bharat Bhushan <bharat.bhushan@nxp.com>
  *
@@ -28,6 +28,9 @@
 #include "exec/memory.h"
 #include "qemu/queue.h"
 #include "sysemu/kvm.h"
+#include "qemu/main-loop.h"
+#include "migration/vmstate.h"
+#include "hw/qdev-properties.h"
 
 static QLIST_HEAD(, VFIOFslmcDevice) root_dprc_list =
     QLIST_HEAD_INITIALIZER(root_dprc_list);
