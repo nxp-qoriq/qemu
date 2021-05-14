@@ -1215,7 +1215,7 @@ static void vfio_fsl_mc_realize(FslMcDeviceState *mcdev, Error **errp)
         return;
     }
 
-    strncpy(vdev->device_type, vbasedev->name, 10);
+    strncpy(vdev->device_type, vbasedev->name, sizeof(vdev->device_type) - 1);
     temp = strchr(vdev->device_type, '.');
     *temp = '\0';
     temp++;
